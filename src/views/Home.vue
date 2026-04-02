@@ -14,6 +14,7 @@ import upIcon from '@/assets/up.png'
 import upSIcon from '@/assets/upS.png'
 import downIcon from '@/assets/down.png'
 import downSIcon from '@/assets/downS.png'
+import eyeIcon from '@/assets/eye.png'
 
 const router = useRouter()
 const fundStore = useFundStore()
@@ -113,25 +114,38 @@ const totalTodayProfit = computed(() => {
   }, 0)
 })
 
+// [WHAT] 计算当日收益百分比（只计算当前筛选后显示的基金）
+const totalTodayProfitPercent = computed(() => {
+  const totalMarketValue = sortedHoldings.value.reduce((total, fund) => {
+    return total + (fund.marketValue || 0)
+  }, 0)
+  
+  if (totalMarketValue === 0) return 0
+  
+  return (totalTodayProfit.value / totalMarketValue) * 100
+})
+
 // [WHAT] 排序方向
 const sortDirection = ref<'up' | 'down' | 'none'>('down')
 
 // [WHAT] 当前筛选来源
 const currentSourceFilter = ref<string>('')
 
+// [WHAT] 过滤观察账户开关（true = 过滤掉观察账户，false = 显示所有）
+const filterObserve = ref<boolean>(true)
+
 // [WHAT] 排序后的持仓基金
 const sortedHoldings = computed(() => {
   let funds = [...holdingStore.holdings]
   
-  // [WHAT] 按来源或QDII筛选
+  // [WHAT] 过滤观察账户
+  if (filterObserve.value) {
+    funds = funds.filter(fund => fund.source !== 'observe')
+  }
+  
+  // [WHAT] 按来源筛选
   if (currentSourceFilter.value) {
-    if (currentSourceFilter.value === 'qdii') {
-      // 筛选QDII基金
-      funds = funds.filter(fund => fund.isQDII === true)
-    } else {
-      // 筛选来源基金
-      funds = funds.filter(fund => fund.source === currentSourceFilter.value)
-    }
+    funds = funds.filter(fund => fund.source === currentSourceFilter.value)
   }
   
   if (sortDirection.value === 'up') {
@@ -159,28 +173,14 @@ function handleSort(direction: 'up' | 'down') {
 
 // [WHAT] 按来源筛选基金
 function filterBySource(source: string) {
-  if (source === 'all') {
-    // 点击全部按钮，取消所有筛选
+  // 切换来源筛选状态
+  if (currentSourceFilter.value === source) {
     currentSourceFilter.value = ''
-    showToast('已显示所有基金')
-  } else if (source === 'qdii') {
-    // 切换QDII筛选状态
-    if (currentSourceFilter.value === 'qdii') {
-      currentSourceFilter.value = ''
-      showToast('已取消QDII筛选')
-    } else {
-      currentSourceFilter.value = 'qdii'
-      showToast('已筛选QDII基金')
-    }
+    showToast('已取消来源筛选')
   } else {
-    // 切换来源筛选状态
-    if (currentSourceFilter.value === source) {
-      currentSourceFilter.value = ''
-      showToast('已取消来源筛选')
-    } else {
-      currentSourceFilter.value = source
-      showToast(`已筛选 ${source === 'ali' ? '支付宝' : source === 'TX' ? '腾讯' : '京东'} 来源的基金`)
-    }
+    currentSourceFilter.value = source
+    const sourceName = source === 'ali' ? '支付宝' : source === 'TX' ? '腾讯' : source === 'JD' ? '京东' : '观察'
+    showToast(`已筛选 ${sourceName} 来源的基金`)
   }
 }
 
@@ -467,19 +467,16 @@ function goToDetail(code: string) {
               </van-button>
             </div>
             <div class="source-buttons web-only">
+              <div class="filter-toggle">
+                <span class="filter-label">过滤</span>
+                <van-switch v-model="filterObserve" size="20" />
+              </div>
               <van-button 
                 size="small" 
-                class="source-button all-button"
-                @click="filterBySource('all')"
+                class="source-button"
+                @click="filterBySource('observe')"
               >
-                ALL
-              </van-button>
-              <van-button 
-                size="small" 
-                class="source-button qdii-button"
-                @click="filterBySource('qdii')"
-              >
-                QDII
+                观察
               </van-button>
               <van-button 
                 size="small" 
@@ -505,9 +502,17 @@ function goToDetail(code: string) {
             </div>
           </div>
           <div class="holding-stats">
-            <div class="today-profit" :class="totalTodayProfit >= 0 ? 'up' : 'down'">
-              <span class="profit-label">今日盈亏</span>
-              <span class="profit-value">{{ totalTodayProfit >= 0 ? '+' : '' }}{{ totalTodayProfit.toFixed(2) }}元</span>
+            <div class="profit-section">
+              <div class="profit-item" :class="totalTodayProfitPercent >= 0 ? 'up' : 'down'">
+                <span class="profit-label">利润率</span>
+                <span class="profit-percent" :class="totalTodayProfitPercent >= 0 ? 'up' : 'down'">
+                  {{ totalTodayProfitPercent >= 0 ? '+' : '' }}{{ totalTodayProfitPercent.toFixed(2) }}%
+                </span>
+              </div>
+              <div class="profit-item" :class="totalTodayProfit >= 0 ? 'up' : 'down'">
+                <span class="profit-label">今日盈亏</span>
+                <span class="profit-value">{{ totalTodayProfit >= 0 ? '+' : '' }}{{ totalTodayProfit.toFixed(2) }}元</span>
+              </div>
             </div>
             <div class="trading-status" :class="tradingStatus.class">
               <span class="status-text">{{ tradingStatus.text }}</span>
@@ -542,19 +547,16 @@ function goToDetail(code: string) {
             </div>
           </div>
           <div class="source-buttons">
+            <div class="filter-toggle">
+              <span class="filter-label">过滤</span>
+              <van-switch v-model="filterObserve" size="20" />
+            </div>
             <van-button 
               size="small" 
-              class="source-button all-button"
-              @click="filterBySource('all')"
+              class="source-button"
+              @click="filterBySource('observe')"
             >
-              ALL
-            </van-button>
-            <van-button 
-              size="small" 
-              class="source-button qdii-button"
-              @click="filterBySource('qdii')"
-            >
-              QDII
+              观察
             </van-button>
             <van-button 
               size="small" 
@@ -608,6 +610,12 @@ function goToDetail(code: string) {
                     src="@/assets/JD.jpg" 
                     class="source-icon-small" 
                     alt="京东" 
+                  />
+                  <img 
+                    v-else-if="fund.source === 'observe'" 
+                    :src="eyeIcon" 
+                    class="source-icon-small" 
+                    alt="观察" 
                   />
                 </div>
                 <div class="fund-name-middle">
@@ -693,6 +701,12 @@ function goToDetail(code: string) {
                       src="@/assets/JD.jpg" 
                       class="source-icon-small" 
                       alt="京东" 
+                    />
+                    <img 
+                      v-else-if="fund.source === 'observe'" 
+                      :src="eyeIcon" 
+                      class="source-icon-small" 
+                      alt="观察" 
                     />
                   </div>
                   <div class="fund-name-middle">
@@ -1140,6 +1154,23 @@ function goToDetail(code: string) {
   margin-left: 12px;
 }
 
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  height: 24px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  margin-right: 4px;
+}
+
+.filter-label {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+}
+
 .source-button {
   display: flex;
   align-items: center;
@@ -1334,30 +1365,42 @@ function goToDetail(code: string) {
   }
 }
 
-.today-profit {
+.profit-section {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+  gap: 16px;
+  align-items: baseline;
 }
 
-.today-profit.up .profit-value {
+.profit-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 70px;
+}
+
+.profit-item.up .profit-value,
+.profit-item.up .profit-percent {
   color: var(--color-up);
 }
 
-.today-profit.down .profit-value {
+.profit-item.down .profit-value,
+.profit-item.down .profit-percent {
   color: var(--color-down);
 }
 
 .profit-label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
-.profit-value {
-  font-size: 13px;
+.profit-value,
+.profit-percent {
+  font-size: 14px;
   font-weight: 600;
   font-family: var(--font-number);
+  white-space: nowrap;
 }
 
 .view-more {

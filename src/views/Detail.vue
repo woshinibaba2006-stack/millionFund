@@ -76,7 +76,8 @@ const sourceFormData = ref({
 const sourceOptions = [
   { text: '支付宝', value: 'ali' },
   { text: '腾讯', value: 'TX' },
-  { text: '京东', value: 'JD' }
+  { text: '京东', value: 'JD' },
+  { text: '观察', value: 'observe' }
 ]
 
 // [WHAT] 持仓信息（如果已持有）

@@ -518,7 +518,8 @@ function restoreHoldings() {
 const sourceOptions = [
   { value: 'ali', text: '支付宝' },
   { value: 'TX', text: '腾讯' },
-  { value: 'JD', text: '京东' }
+  { value: 'JD', text: '京东' },
+  { value: 'observe', text: '观察' }
 ]
 
 // [WHAT] 打开批量录入弹窗
