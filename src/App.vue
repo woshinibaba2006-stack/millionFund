@@ -132,8 +132,8 @@ function onTabChange(name: string | number) {
   /* [WHY] 弹性布局，让 router-view 撑满剩余空间 */
   display: flex;
   flex-direction: column;
-  /* [WHAT] 添加安全区支持，避免与系统状态栏重叠 */
-  padding-top: env(safe-area-inset-top, 0px);
+  /* [WHAT] 安全区由子页面自行处理 */
+  /* padding-top: env(safe-area-inset-top, 0px); */
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 

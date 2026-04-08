@@ -13,9 +13,9 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
-        <!-- [WHY] 显示系统虚拟导航栏，而非全屏沉浸模式 -->
-        <item name="android:windowLayoutInDisplayCutoutMode">default</item>
-        <item name="android:navigationBarColor">@android:color/white</item>
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
 
 

@@ -509,6 +509,7 @@ function goToDetail(code: string) {
                   {{ totalTodayProfitPercent >= 0 ? '+' : '' }}{{ totalTodayProfitPercent.toFixed(2) }}%
                 </span>
               </div>
+              <div class="profit-divider"></div>
               <div class="profit-item" :class="totalTodayProfit >= 0 ? 'up' : 'down'">
                 <span class="profit-label">今日盈亏</span>
                 <span class="profit-value">{{ totalTodayProfit >= 0 ? '+' : '' }}{{ totalTodayProfit.toFixed(2) }}元</span>
@@ -517,6 +518,22 @@ function goToDetail(code: string) {
             <div class="trading-status" :class="tradingStatus.class">
               <span class="status-text">{{ tradingStatus.text }}</span>
               <span class="status-time">{{ tradingStatus.subText }}</span>
+            </div>
+          </div>
+        </div>
+        <!-- 移动端：利润率和今日盈亏 -->
+        <div class="profit-row mobile-only">
+          <div class="profit-section">
+            <div class="profit-item" :class="totalTodayProfitPercent >= 0 ? 'up' : 'down'">
+              <span class="profit-label">利润率</span>
+              <span class="profit-percent" :class="totalTodayProfitPercent >= 0 ? 'up' : 'down'">
+                {{ totalTodayProfitPercent >= 0 ? '+' : '' }}{{ totalTodayProfitPercent.toFixed(2) }}%
+              </span>
+            </div>
+            <div class="profit-divider"></div>
+            <div class="profit-item" :class="totalTodayProfit >= 0 ? 'up' : 'down'">
+              <span class="profit-label">今日盈亏</span>
+              <span class="profit-value">{{ totalTodayProfit >= 0 ? '+' : '' }}{{ totalTodayProfit.toFixed(2) }}元</span>
             </div>
           </div>
         </div>
@@ -1335,9 +1352,55 @@ function goToDetail(code: string) {
     gap: 8px;
   }
   
-  /* 移动端：今日盈亏和交易状态右对齐 */
+  /* 移动端：调整利润率和今日盈亏的样式 - 移到第二行 */
+   
+  /* 移动端 holding-stats 只显示交易状态 */
+  .holding-stats .profit-section {
+    display: none;
+  }
+  
   .holding-stats {
-    align-items: flex-end;
+    margin-left: auto;
+  }
+  
+  .profit-row {
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+  
+  .profit-row .profit-section {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+  }
+  
+  .profit-row .profit-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+  }
+  
+  .profit-row .profit-divider {
+    width: 1px;
+    height: 16px;
+    background: var(--border-color);
+    flex-shrink: 0;
+  }
+  
+  .profit-row .profit-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+  
+  .profit-row .profit-value,
+  .profit-row .profit-percent {
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-number);
   }
 }
 
@@ -1377,6 +1440,12 @@ function goToDetail(code: string) {
   align-items: center;
   gap: 2px;
   min-width: 70px;
+}
+
+.profit-divider {
+  width: 1px;
+  background: var(--border-color);
+  align-self: stretch;
 }
 
 .profit-item.up .profit-value,
@@ -2443,6 +2512,11 @@ function goToDetail(code: string) {
 @media (min-width: 768px) {
   /* 网页端：隐藏移动端元素 */
   .mobile-only {
+    display: none;
+  }
+  
+  /* 网页端：隐藏利润行 */
+  .profit-row {
     display: none;
   }
   
