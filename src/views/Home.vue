@@ -294,6 +294,9 @@ const totalTodayProfitPercent = computed(() => {
 // [WHAT] 排序方向
 const sortDirection = ref<'up' | 'down' | 'none'>('down')
 
+// [WHAT] UI模式：simple=简洁 / full=全功能
+const uiMode = ref<'simple' | 'full'>('simple')
+
 // [WHAT] 当前筛选来源
 const currentSourceFilter = ref<string>('')
 
@@ -602,6 +605,18 @@ function goToDetail(code: string) {
               </van-button>
             </div>
             <div class="source-buttons web-only">
+              <div class="ui-mode-toggle">
+                <span 
+                  class="ui-mode-btn" 
+                  :class="{ active: uiMode === 'simple' }"
+                  @click="uiMode = 'simple'"
+                >简</span>
+                <span 
+                  class="ui-mode-btn" 
+                  :class="{ active: uiMode === 'full' }"
+                  @click="uiMode = 'full'"
+                >全</span>
+              </div>
               <van-button 
                 size="small" 
                 class="source-button"
@@ -691,6 +706,18 @@ function goToDetail(code: string) {
             </div>
           </div>
           <div class="source-buttons">
+            <div class="ui-mode-toggle">
+              <span 
+                class="ui-mode-btn" 
+                :class="{ active: uiMode === 'simple' }"
+                @click="uiMode = 'simple'"
+              >简</span>
+              <span 
+                class="ui-mode-btn" 
+                :class="{ active: uiMode === 'full' }"
+                @click="uiMode = 'full'"
+              >全</span>
+            </div>
             <van-button 
               size="small" 
               class="source-button"
@@ -782,7 +809,7 @@ function goToDetail(code: string) {
                 </div>
               </div>
             </div>
-            <div class="index-trend web-only" v-if="fund.trendPrediction">
+            <div class="index-trend web-only" v-if="uiMode === 'full' && fund.trendPrediction">
               <div class="trend-prediction">
                 <div class="trend-column trend-column-1">
                   <div class="trend-item">
@@ -813,7 +840,7 @@ function goToDetail(code: string) {
                 </div>
               </div>
             </div>
-            <div class="index-bar web-only"></div>
+            <div class="index-bar web-only" v-if="uiMode === 'full'"></div>
             
             <!-- 移动端布局 -->
             <div class="mobile-item-layout mobile-only">
@@ -877,7 +904,7 @@ function goToDetail(code: string) {
               </div>
               
               <!-- 第四行：趋势预测 -->
-              <div class="mobile-item-row mobile-item-row-4" v-if="fund.trendPrediction">
+              <div class="mobile-item-row mobile-item-row-4" v-if="uiMode === 'full' && fund.trendPrediction">
                 <div class="trend-prediction">
                   <span class="trend-item trend-item-vertical">
                     <span class="trend-text" :class="fund.trendPrediction.trend === 'up' ? 'up' : fund.trendPrediction.trend === 'down' ? 'down' : ''">
@@ -900,7 +927,7 @@ function goToDetail(code: string) {
               <div class="index-holdings mobile-only" @click="openTopHoldings(fund, $event)">
                 <span class="top-holdings-label">前十大重仓股</span>
               </div>
-              <div class="intraday-section mobile-only" @click="openIntradayModal(fund, $event)">
+              <div class="intraday-section mobile-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
                 <span class="intraday-label-mobile">当日分时图</span>
               </div>
             </div>
@@ -908,7 +935,7 @@ function goToDetail(code: string) {
               <span class="top-holdings-label">前10大重仓股</span>
               <span class="top-holdings-arrow">›</span>
             </div>
-            <div class="intraday-section web-only" @click="openIntradayModal(fund, $event)">
+            <div class="intraday-section web-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
               <div class="intraday-header">
                 <van-icon name="chart-trending-o" size="12" class="intraday-arrow" />
                 <span class="intraday-label">当日分时估值</span>
@@ -985,7 +1012,7 @@ function goToDetail(code: string) {
                 </div>
               </div>
             </div>
-            <div class="index-trend web-only" v-if="fund.trendPrediction">
+            <div class="index-trend web-only" v-if="uiMode === 'full' && fund.trendPrediction">
               <div class="trend-prediction">
                 <div class="trend-column trend-column-1">
                   <div class="trend-item">
@@ -1016,7 +1043,7 @@ function goToDetail(code: string) {
                 </div>
               </div>
             </div>
-            <div class="index-bar web-only"></div>
+            <div class="index-bar web-only" v-if="uiMode === 'full'"></div>
             
             <!-- 移动端布局 -->
             <div class="mobile-item-layout mobile-only">
@@ -1080,7 +1107,7 @@ function goToDetail(code: string) {
               </div>
               
               <!-- 第四行：趋势预测 -->
-              <div class="mobile-item-row mobile-item-row-4" v-if="fund.trendPrediction">
+              <div class="mobile-item-row mobile-item-row-4" v-if="uiMode === 'full' && fund.trendPrediction">
                 <div class="trend-prediction">
                   <span class="trend-item trend-item-vertical">
                     <span class="trend-text" :class="fund.trendPrediction.trend === 'up' ? 'up' : fund.trendPrediction.trend === 'down' ? 'down' : ''">
@@ -1103,7 +1130,7 @@ function goToDetail(code: string) {
               <div class="index-holdings mobile-only" @click="openTopHoldings(fund, $event)">
                 <span class="top-holdings-label">前十大重仓股</span>
               </div>
-              <div class="intraday-section mobile-only" @click="openIntradayModal(fund, $event)">
+              <div class="intraday-section mobile-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
                 <span class="intraday-label-mobile">当日分时图</span>
               </div>
             </div>
@@ -1111,7 +1138,7 @@ function goToDetail(code: string) {
               <span class="top-holdings-label">前10大重仓股</span>
               <span class="top-holdings-arrow">›</span>
             </div>
-            <div class="intraday-section web-only" @click="openIntradayModal(fund, $event)">
+            <div class="intraday-section web-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
               <div class="intraday-header">
                 <van-icon name="chart-trending-o" size="12" class="intraday-arrow" />
                 <span class="intraday-label">当日分时估值</span>
@@ -1598,6 +1625,44 @@ function goToDetail(code: string) {
   margin-left: 12px;
 }
 
+.ui-mode-toggle {
+  display: flex;
+  align-items: center;
+  background: var(--bg-primary, #f5f5f5);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-light, #e0e0e0);
+  margin-right: 4px;
+}
+
+.ui-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #999);
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.ui-mode-btn:first-child {
+  border-right: 1px solid var(--border-light, #e0e0e0);
+}
+
+.ui-mode-btn.active {
+  background: linear-gradient(180deg, #0ea5e9, #22d3ee);
+  color: #05263b;
+  font-weight: 600;
+}
+
+.ui-mode-btn:hover:not(.active) {
+  background: var(--bg-secondary, #eee);
+}
+
 .filter-toggle {
   display: flex;
   align-items: center;
@@ -1621,6 +1686,10 @@ function goToDetail(code: string) {
   justify-content: center;
   border-radius: 4px;
   overflow: hidden;
+}
+
+.source-button.active {
+  box-shadow: 0 0 0 2px #0ea5e9;
 }
 
 .all-button,
