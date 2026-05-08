@@ -928,28 +928,31 @@ function goToDetail(code: string) {
                 <span class="top-holdings-label">前十大重仓股</span>
               </div>
               <div class="intraday-section mobile-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
-                <span class="intraday-label-mobile">当日分时图</span>
+                <span class="intraday-label-mobile">
+                  <van-icon name="chart-trending-o" size="12" />
+                  当日分时图
+                </span>
               </div>
               <div class="added-gain-section mobile-only" v-if="fund.addedGain !== undefined">
-                <span class="added-gain-label" :class="fund.addedGain >= 0 ? 'up' : 'down'">
-                  累计{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%
-                </span>
+                <div class="added-gain-badge mobile-added-gain" :class="fund.addedGain >= 0 ? 'up' : 'down'">
+                  <span>累计{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%</span>
+                </div>
               </div>
             </div>
             <div class="index-holdings web-only" v-if="uiMode === 'full'" @click="openTopHoldings(fund, $event)">
-              <span class="top-holdings-label">前10大重仓股</span>
-              <span class="top-holdings-arrow">›</span>
+              <span class="top-holdings-label">前10大重仓股 <span class="top-holdings-arrow">›</span></span>
             </div>
             <div class="intraday-section web-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
-              <div class="intraday-header">
-                <van-icon name="chart-trending-o" size="12" class="intraday-arrow" />
-                <span class="intraday-label">当日分时估值</span>
-              </div>
+              <span class="intraday-label">
+                <van-icon name="chart-trending-o" size="12" />
+                当日分时估值
+              </span>
             </div>
             <div class="added-gain-section web-only" v-if="fund.addedGain !== undefined">
-              <span class="added-gain-label" :class="fund.addedGain >= 0 ? 'up' : 'down'">
-                添加后涨跌幅{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%
-              </span>
+              <div class="added-gain-badge" :class="fund.addedGain >= 0 ? 'up' : 'down'">
+                <van-icon :name="fund.addedGain >= 0 ? 'arrow-up' : 'arrow-down'" size="14" />
+                <span>添加后涨跌幅{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%</span>
+              </div>
             </div>
           </div>
           <!-- 观察基金分割线 -->
@@ -1141,28 +1144,31 @@ function goToDetail(code: string) {
                 <span class="top-holdings-label">前十大重仓股</span>
               </div>
               <div class="intraday-section mobile-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
-                <span class="intraday-label-mobile">当日分时图</span>
+                <span class="intraday-label-mobile">
+                  <van-icon name="chart-trending-o" size="12" />
+                  当日分时图
+                </span>
               </div>
               <div class="added-gain-section mobile-only" v-if="fund.addedGain !== undefined">
-                <span class="added-gain-label" :class="fund.addedGain >= 0 ? 'up' : 'down'">
-                  累计{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%
-                </span>
+                <div class="added-gain-badge mobile-added-gain" :class="fund.addedGain >= 0 ? 'up' : 'down'">
+                  <span>累计{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%</span>
+                </div>
               </div>
             </div>
             <div class="index-holdings web-only" v-if="uiMode === 'full'" @click="openTopHoldings(fund, $event)">
-              <span class="top-holdings-label">前10大重仓股</span>
-              <span class="top-holdings-arrow">›</span>
+              <span class="top-holdings-label">前10大重仓股 <span class="top-holdings-arrow">›</span></span>
             </div>
             <div class="intraday-section web-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
-              <div class="intraday-header">
-                <van-icon name="chart-trending-o" size="12" class="intraday-arrow" />
-                <span class="intraday-label">当日分时估值</span>
-              </div>
+              <span class="intraday-label">
+                <van-icon name="chart-trending-o" size="12" />
+                当日分时估值
+              </span>
             </div>
             <div class="added-gain-section web-only" v-if="fund.addedGain !== undefined">
-              <span class="added-gain-label" :class="fund.addedGain >= 0 ? 'up' : 'down'">
-                添加后涨跌幅{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%
-              </span>
+              <div class="added-gain-badge" :class="fund.addedGain >= 0 ? 'up' : 'down'">
+                <van-icon :name="fund.addedGain >= 0 ? 'arrow-up' : 'arrow-down'" size="14" />
+                <span>添加后涨跌幅{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1739,6 +1745,13 @@ function goToDetail(code: string) {
   min-width: unset;
 }
 
+.sort-buttons .van-button--primary {
+  background: linear-gradient(180deg, #0ea5e9, #22d3ee) !important;
+  border-color: transparent !important;
+  color: #05263b !important;
+  font-weight: 600;
+}
+
 .live-dot {
   width: 6px;
   height: 6px;
@@ -1849,6 +1862,11 @@ function goToDetail(code: string) {
     border-radius: 50%;
     cursor: pointer;
     transition: all 0.2s;
+  }
+  
+  .sort-icon-button.active {
+    background: linear-gradient(180deg, #0ea5e9, #22d3ee);
+    border-color: transparent;
   }
   
   .sort-icon-button:active {
@@ -3059,46 +3077,73 @@ function goToDetail(code: string) {
 .index-holdings {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
+  justify-content: center;
   cursor: pointer;
-  border-top: 1px solid var(--van-border-color, #ebedf0);
-  margin-top: 4px;
+  margin-top: 2px;
+  width: 100%;
+}
+
+.top-holdings-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-number);
+  padding: 3px 8px;
+  border-radius: 6px;
+  width: 100%;
+  color: #05263b;
+  background: linear-gradient(180deg, #0ea5e9, #22d3ee);
+}
+
+.top-holdings-arrow {
+  color: #05263b;
 }
 
 /* ========== 当日分时估值 ========== */
 .intraday-section {
-  border-top: 1px solid var(--van-border-color, #ebedf0);
-  margin-top: 4px;
+  margin-top: 2px;
   overflow: hidden;
-}
-
-.intraday-header {
-  display: flex;
-  align-items: center;
-  padding: 6px 12px;
-  cursor: pointer;
-  gap: 6px;
+  width: 100%;
 }
 
 .intraday-arrow {
-  color: #888;
+  color: #05263b;
   transition: transform 0.2s;
 }
 
 .intraday-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   font-size: 11px;
-  color: #888;
-  flex: 1;
+  font-weight: 600;
+  font-family: var(--font-number);
+  color: #05263b;
+  background: linear-gradient(180deg, #0ea5e9, #22d3ee);
+  border-radius: 6px;
+  padding: 3px 8px;
+  width: 100%;
+  text-align: center;
 }
 
 .intraday-label-mobile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   font-size: 11px;
-  color: #888;
+  font-weight: 600;
+  font-family: var(--font-number);
+  color: #05263b;
+  background: linear-gradient(180deg, #0ea5e9, #22d3ee);
+  border-radius: 6px;
+  padding: 3px 8px;
   text-align: center;
   width: 100%;
-  display: block;
-  padding: 4px 0;
 }
 
 .intraday-time {
@@ -3152,17 +3197,6 @@ function goToDetail(code: string) {
   padding: 4px 0;
   margin-top: 2px;
   cursor: pointer;
-}
-
-.top-holdings-label {
-  font-size: 11px;
-  color: #888;
-}
-
-.top-holdings-arrow {
-  font-size: 14px;
-  color: #bbb;
-  font-weight: bold;
 }
 
 .top-holdings-popup {
@@ -3457,24 +3491,44 @@ function goToDetail(code: string) {
 
 /* ========== 添加后涨幅 ========== */
 .added-gain-section {
-  border-top: 1px solid var(--van-border-color, #ebedf0);
-  margin-top: 4px;
+  margin-top: 2px;
   overflow: hidden;
+  width: 100%;
 }
 
-.added-gain-label {
-  display: block;
-  text-align: center;
-  padding: 4px 12px;
+.added-gain-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
+  font-family: var(--font-number);
+  padding: 3px 8px;
+  border-radius: 6px;
+  width: 100%;
 }
 
-.added-gain-label.up {
-  color: var(--up-color, #ff6b6b);
+.added-gain-badge.up {
+  color: var(--color-up);
+  background: rgba(255, 107, 107, 0.12);
 }
 
-.added-gain-label.down {
-  color: var(--down-color, #51cf66);
+.added-gain-badge.down {
+  color: var(--color-down);
+  background: rgba(81, 207, 102, 0.12);
+}
+
+/* 移动端：去掉累计涨幅背景色，减小字体 */
+@media (max-width: 767px) {
+  .added-gain-badge.up,
+  .added-gain-badge.down {
+    background: transparent;
+  }
+  
+  .mobile-added-gain {
+    font-size: 10px;
+    gap: 0;
+  }
 }
 </style>

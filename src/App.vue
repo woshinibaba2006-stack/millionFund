@@ -183,7 +183,8 @@ function onTabChange(name: string | number) {
 
 /* 选中时的背景色 */
 :deep(.van-tabbar-item--active) {
-  background-color: #9c27b0 !important;
-  color: white !important;
+  background: linear-gradient(180deg, #0ea5e9, #22d3ee) !important;
+  color: #05263b !important;
+  font-weight: 600;
 }
 </style>

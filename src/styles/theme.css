@@ -150,7 +150,9 @@ body {
 }
 
 .van-tabbar-item--active {
-  color: var(--color-primary) !important;
+  background: linear-gradient(180deg, #0ea5e9, #22d3ee) !important;
+  color: #05263b !important;
+  font-weight: 600;
 }
 
 .van-loading__text {

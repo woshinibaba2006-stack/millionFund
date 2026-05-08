@@ -485,7 +485,9 @@
 }
 
 .van-tabbar-item--active {
-  color: var(--md-primary) !important;
+  background: linear-gradient(180deg, #0ea5e9, #22d3ee) !important;
+  color: #05263b !important;
+  font-weight: 600;
 }
 
 /* ========== Material 顶部导航栏增强 ========== */
