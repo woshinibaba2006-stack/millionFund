@@ -10,11 +10,11 @@ import { fetchMarketIndicesFast, fetchGlobalIndices, type MarketIndexSimple, typ
 import { fetchFinanceNews, type NewsItem, getTradingSession, type TradingSession } from '@/api/tiantianApi'
 import { showConfirmDialog, showToast } from 'vant'
 import FundCard from '@/components/FundCard.vue'
+import FundGridItem from '@/components/FundGridItem.vue'
 import upIcon from '@/assets/up.png'
 import upSIcon from '@/assets/upS.png'
 import downIcon from '@/assets/down.png'
 import downSIcon from '@/assets/downS.png'
-import eyeIcon from '@/assets/eye.png'
 
 const router = useRouter()
 const fundStore = useFundStore()
@@ -144,10 +144,12 @@ function drawIntradayChartOnCanvas(canvas: HTMLCanvasElement, data: IntradayPoin
 
 async function openIntradayModal(fund: any, event: Event) {
   event.stopPropagation()
+  // [WHY] 每次打开弹窗时清空旧数据，强制重新加载最新数据
   intradayModal.value = { open: true, fund, data: [], loading: true }
   try {
-    const data = await fetchIntradayData(fund.code)
-    if (data) {
+    // [WHY] 传入 forceRefresh=true 跳过缓存，确保获取最新分时数据
+    const data = await fetchIntradayData(fund.code, true)
+    if (data && data.length > 0) {
       intradayModal.value.data = data
     }
   } catch (err) {
@@ -336,6 +338,12 @@ const observeHoldings = computed(() => {
 // [WHAT] 排序持仓基金（兼容旧代码）
 const sortedHoldings = computed(() => {
   return [...normalHoldings.value, ...observeHoldings.value]
+})
+
+// [WHAT] 沪深300实时涨跌幅
+const hs300ChangePercent = computed(() => {
+  const hs300 = indices.value.find(idx => idx.code === '000300')
+  return hs300 ? hs300.changePercent : 0
 })
 
 // [WHAT] 排序持仓基金
@@ -641,6 +649,12 @@ function goToDetail(code: string) {
               >
                 <img src="@/assets/JD.jpg" class="source-icon" alt="京东" />
               </van-button>
+              <div class="reference-ma-badge">
+                <span class="reference-ma-label">参考均线</span>
+                <span class="reference-ma-value" :class="hs300ChangePercent >= 0 ? 'up' : 'down'">
+                  {{ hs300ChangePercent >= 0 ? '+' : '' }}{{ hs300ChangePercent.toFixed(2) }}%
+                </span>
+              </div>
             </div>
           </div>
           <div class="holding-stats">
@@ -742,435 +756,38 @@ function goToDetail(code: string) {
             >
               <img src="@/assets/JD.jpg" class="source-icon" alt="京东" />
             </van-button>
+            <div class="reference-ma-badge">
+              <span class="reference-ma-label">参考均线</span>
+              <span class="reference-ma-value" :class="hs300ChangePercent >= 0 ? 'up' : 'down'">
+                {{ hs300ChangePercent >= 0 ? '+' : '' }}{{ hs300ChangePercent.toFixed(2) }}%
+              </span>
+            </div>
           </div>
         </div>
         <div class="index-grid">
-          <!-- 正常账户基金 -->
-          <div 
-            v-for="fund in normalHoldings" 
-            :key="fund.code" 
-            class="index-item"
-            :class="[fund.todayChange && parseFloat(fund.todayChange) >= 0 ? 'up' : 'down']"
+          <FundGridItem
+            v-for="fund in normalHoldings"
+            :key="fund.code"
+            :fund="fund"
+            :ui-mode="uiMode"
             @click="router.push(`/detail/${fund.code}`)"
-          >
-            <!-- 网页端布局 -->
-            <div class="index-name web-only">
-              <div class="fund-name-content">
-                <div class="fund-name-left">
-                  <img 
-                    v-if="fund.source === 'ali'" 
-                    src="@/assets/ali.jpg" 
-                    class="source-icon-small" 
-                    alt="支付宝" 
-                  />
-                  <img 
-                    v-else-if="fund.source === 'TX'" 
-                    src="@/assets/TX.jpg" 
-                    class="source-icon-small" 
-                    alt="腾讯" 
-                  />
-                  <img 
-                    v-else-if="fund.source === 'JD'" 
-                    src="@/assets/JD.jpg" 
-                    class="source-icon-small" 
-                    alt="京东" 
-                  />
-                  <img 
-                    v-else-if="fund.source === 'observe'" 
-                    :src="eyeIcon" 
-                    class="source-icon-small" 
-                    alt="观察" 
-                  />
-                </div>
-                <div class="fund-name-middle">
-                  <span 
-                    v-if="fund.isQDII" 
-                    class="qdii-tag"
-                  >
-                    QD
-                  </span>
-                </div>
-                <div class="fund-name-right">
-                  {{ fund.name }}
-                </div>
-              </div>
-            </div>
-            <div class="index-content web-only">
-              <div class="index-left">
-                <div class="fund-code">{{ fund.code }}</div>
-                <div class="fund-sectors">
-                  {{ fund.industrySectors || '未设置' }}
-                </div>
-              </div>
-              <div class="index-right">
-                <div class="index-change">
-                  <van-icon :name="fund.todayChange && parseFloat(fund.todayChange) >= 0 ? 'arrow-up' : 'arrow-down'" size="14" />
-                  <span>{{ fund.todayChange ? (parseFloat(fund.todayChange) >= 0 ? '+' : '') + fund.todayChange + '%' : '--' }}</span>
-                </div>
-              </div>
-            </div>
-            <div class="index-trend web-only" v-if="uiMode === 'full' && fund.trendPrediction">
-              <div class="trend-prediction">
-                <div class="trend-column trend-column-1">
-                  <div class="trend-item">
-                    <span class="trend-text" :class="fund.trendPrediction.trend === 'up' ? 'up' : fund.trendPrediction.trend === 'down' ? 'down' : ''">
-                      {{ fund.trendPrediction.trend === 'up' ? '看涨' : fund.trendPrediction.trend === 'down' ? '看跌' : '震荡' }}
-                    </span>
-                  </div>
-                </div>
-                <div class="trend-column">
-                  <div class="trend-item">
-                    <span class="trend-label">{{ fund.dataSource === 'nav' ? '净值' : '估值' }}</span>
-                    <span class="trend-value" :class="fund.todayChange && parseFloat(fund.todayChange) >= 0 ? 'up' : 'down'">
-                      {{ fund.currentValue?.toFixed(3) || '--' }}
-                    </span>
-                  </div>
-                </div>
-                <div class="trend-column">
-                  <div class="trend-item">
-                    <span class="trend-label">支撑</span>
-                    <span class="trend-value down">{{ fund.trendPrediction.supportLevel?.toFixed(2) || '--' }}</span>
-                  </div>
-                </div>
-                <div class="trend-column">
-                  <div class="trend-item">
-                    <span class="trend-label">阻力</span>
-                    <span class="trend-value up">{{ fund.trendPrediction.resistanceLevel?.toFixed(2) || '--' }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="index-bar web-only" v-if="uiMode === 'full'"></div>
-            
-            <!-- 移动端布局 -->
-            <div class="mobile-item-layout mobile-only">
-              <!-- 第一行：图标 + 基金名称 -->
-              <div class="mobile-item-row mobile-item-row-1">
-                <div class="fund-name-content">
-                  <div class="fund-name-left">
-                    <img 
-                      v-if="fund.source === 'ali'" 
-                      src="@/assets/ali.jpg" 
-                      class="source-icon-small" 
-                      alt="支付宝" 
-                    />
-                    <img 
-                      v-else-if="fund.source === 'TX'" 
-                      src="@/assets/TX.jpg" 
-                      class="source-icon-small" 
-                      alt="腾讯" 
-                    />
-                    <img 
-                      v-else-if="fund.source === 'JD'" 
-                      src="@/assets/JD.jpg" 
-                      class="source-icon-small" 
-                      alt="京东" 
-                    />
-                    <img 
-                      v-else-if="fund.source === 'observe'" 
-                      :src="eyeIcon" 
-                      class="source-icon-small" 
-                      alt="观察" 
-                    />
-                  </div>
-                  <div class="fund-name-middle">
-                    <span 
-                      v-if="fund.isQDII" 
-                      class="qdii-tag"
-                    >
-                      QD
-                    </span>
-                  </div>
-                  <div class="fund-name-right">
-                    {{ fund.name }}
-                  </div>
-                </div>
-              </div>
-              
-              <!-- 第二行：基金代码 和 行业板块 -->
-              <div class="mobile-item-row mobile-item-row-2">
-                <div class="fund-code">{{ fund.code }}</div>
-                <div class="fund-sectors">
-                  {{ fund.industrySectors || '未设置' }}
-                </div>
-              </div>
-              
-              <!-- 第三行：涨跌幅模块 -->
-              <div class="mobile-item-row mobile-item-row-3">
-                <div class="index-change">
-                  <van-icon :name="fund.todayChange && parseFloat(fund.todayChange) >= 0 ? 'arrow-up' : 'arrow-down'" size="14" />
-                  <span>{{ fund.todayChange ? (parseFloat(fund.todayChange) >= 0 ? '+' : '') + fund.todayChange + '%' : '--' }}</span>
-                </div>
-              </div>
-              
-              <!-- 第四行：趋势预测 -->
-              <div class="mobile-item-row mobile-item-row-4" v-if="uiMode === 'full' && fund.trendPrediction">
-                <div class="trend-prediction">
-                  <span class="trend-item trend-item-vertical">
-                    <span class="trend-text" :class="fund.trendPrediction.trend === 'up' ? 'up' : fund.trendPrediction.trend === 'down' ? 'down' : ''">
-                      {{ fund.trendPrediction.trend === 'up' ? '看涨' : fund.trendPrediction.trend === 'down' ? '看跌' : '震荡' }}
-                    </span>
-                    <span class="trend-value" :class="fund.todayChange && parseFloat(fund.todayChange) >= 0 ? 'up' : 'down'">
-                      {{ fund.currentValue?.toFixed(3) || '--' }}
-                    </span>
-                  </span>
-                  <span class="trend-item trend-item-vertical">
-                    <span class="trend-label">支撑</span>
-                    <span class="trend-value down">{{ fund.trendPrediction.supportLevel?.toFixed(2) || '--' }}</span>
-                  </span>
-                  <span class="trend-item trend-item-vertical">
-                    <span class="trend-label">阻力</span>
-                    <span class="trend-value up">{{ fund.trendPrediction.resistanceLevel?.toFixed(2) || '--' }}</span>
-                  </span>
-                </div>
-              </div>
-              <div class="index-holdings mobile-only" v-if="uiMode === 'full'" @click="openTopHoldings(fund, $event)">
-                <span class="top-holdings-label">前十大重仓股</span>
-              </div>
-              <div class="intraday-section mobile-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
-                <span class="intraday-label-mobile">
-                  <van-icon name="chart-trending-o" size="12" />
-                  当日分时图
-                </span>
-              </div>
-              <div class="added-gain-section mobile-only" v-if="fund.addedGain !== undefined">
-                <div class="added-gain-badge mobile-added-gain" :class="fund.addedGain >= 0 ? 'up' : 'down'">
-                  <span>累计{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%</span>
-                </div>
-              </div>
-            </div>
-            <div class="index-holdings web-only" v-if="uiMode === 'full'" @click="openTopHoldings(fund, $event)">
-              <span class="top-holdings-label">前10大重仓股 <span class="top-holdings-arrow">›</span></span>
-            </div>
-            <div class="intraday-section web-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
-              <span class="intraday-label">
-                <van-icon name="chart-trending-o" size="12" />
-                当日分时估值
-              </span>
-            </div>
-            <div class="added-gain-section web-only" v-if="fund.addedGain !== undefined">
-              <div class="added-gain-badge" :class="fund.addedGain >= 0 ? 'up' : 'down'">
-                <van-icon :name="fund.addedGain >= 0 ? 'arrow-up' : 'arrow-down'" size="14" />
-                <span>添加后涨跌幅{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%</span>
-              </div>
-            </div>
-          </div>
-          <!-- 观察基金分割线 -->
+            @open-top-holdings="openTopHoldings(fund, $event)"
+            @open-intraday-modal="openIntradayModal(fund, $event)"
+          />
           <div v-if="observeHoldings.length > 0" class="observe-divider">
             <div class="observe-divider-line"></div>
             <span class="observe-divider-text">量化观察</span>
             <div class="observe-divider-line"></div>
           </div>
-          <!-- 观察账户基金 -->
-          <div 
-            v-for="fund in observeHoldings" 
-            :key="fund.code" 
-            class="index-item"
-            :class="[fund.todayChange && parseFloat(fund.todayChange) >= 0 ? 'up' : 'down']"
+          <FundGridItem
+            v-for="fund in observeHoldings"
+            :key="fund.code"
+            :fund="fund"
+            :ui-mode="uiMode"
             @click="router.push(`/detail/${fund.code}`)"
-          >
-            <!-- 网页端布局 -->
-            <div class="index-name web-only">
-              <div class="fund-name-content">
-                <div class="fund-name-left">
-                  <img 
-                    v-if="fund.source === 'ali'" 
-                    src="@/assets/ali.jpg" 
-                    class="source-icon-small" 
-                    alt="支付宝" 
-                  />
-                  <img 
-                    v-else-if="fund.source === 'TX'" 
-                    src="@/assets/TX.jpg" 
-                    class="source-icon-small" 
-                    alt="腾讯" 
-                  />
-                  <img 
-                    v-else-if="fund.source === 'JD'" 
-                    src="@/assets/JD.jpg" 
-                    class="source-icon-small" 
-                    alt="京东" 
-                  />
-                  <img 
-                    v-else-if="fund.source === 'observe'" 
-                    :src="eyeIcon" 
-                    class="source-icon-small" 
-                    alt="观察" 
-                  />
-                </div>
-                <div class="fund-name-middle">
-                  <span 
-                    v-if="fund.isQDII" 
-                    class="qdii-tag"
-                  >
-                    QD
-                  </span>
-                </div>
-                <div class="fund-name-right">
-                  {{ fund.name }}
-                </div>
-              </div>
-            </div>
-            <div class="index-content web-only">
-              <div class="index-left">
-                <div class="fund-code">{{ fund.code }}</div>
-                <div class="fund-sectors">
-                  {{ fund.industrySectors || '未设置' }}
-                </div>
-              </div>
-              <div class="index-right">
-                <div class="index-change">
-                  <van-icon :name="fund.todayChange && parseFloat(fund.todayChange) >= 0 ? 'arrow-up' : 'arrow-down'" size="14" />
-                  <span>{{ fund.todayChange ? (parseFloat(fund.todayChange) >= 0 ? '+' : '') + fund.todayChange + '%' : '--' }}</span>
-                </div>
-              </div>
-            </div>
-            <div class="index-trend web-only" v-if="uiMode === 'full' && fund.trendPrediction">
-              <div class="trend-prediction">
-                <div class="trend-column trend-column-1">
-                  <div class="trend-item">
-                    <span class="trend-text" :class="fund.trendPrediction.trend === 'up' ? 'up' : fund.trendPrediction.trend === 'down' ? 'down' : ''">
-                      {{ fund.trendPrediction.trend === 'up' ? '看涨' : fund.trendPrediction.trend === 'down' ? '看跌' : '震荡' }}
-                    </span>
-                  </div>
-                </div>
-                <div class="trend-column">
-                  <div class="trend-item">
-                    <span class="trend-label">{{ fund.dataSource === 'nav' ? '净值' : '估值' }}</span>
-                    <span class="trend-value" :class="fund.todayChange && parseFloat(fund.todayChange) >= 0 ? 'up' : 'down'">
-                      {{ fund.currentValue?.toFixed(3) || '--' }}
-                    </span>
-                  </div>
-                </div>
-                <div class="trend-column">
-                  <div class="trend-item">
-                    <span class="trend-label">支撑</span>
-                    <span class="trend-value down">{{ fund.trendPrediction.supportLevel?.toFixed(2) || '--' }}</span>
-                  </div>
-                </div>
-                <div class="trend-column">
-                  <div class="trend-item">
-                    <span class="trend-label">阻力</span>
-                    <span class="trend-value up">{{ fund.trendPrediction.resistanceLevel?.toFixed(2) || '--' }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="index-bar web-only" v-if="uiMode === 'full'"></div>
-            
-            <!-- 移动端布局 -->
-            <div class="mobile-item-layout mobile-only">
-              <!-- 第一行：图标 + 基金名称 -->
-              <div class="mobile-item-row mobile-item-row-1">
-                <div class="fund-name-content">
-                  <div class="fund-name-left">
-                    <img 
-                      v-if="fund.source === 'ali'" 
-                      src="@/assets/ali.jpg" 
-                      class="source-icon-small" 
-                      alt="支付宝" 
-                    />
-                    <img 
-                      v-else-if="fund.source === 'TX'" 
-                      src="@/assets/TX.jpg" 
-                      class="source-icon-small" 
-                      alt="腾讯" 
-                    />
-                    <img 
-                      v-else-if="fund.source === 'JD'" 
-                      src="@/assets/JD.jpg" 
-                      class="source-icon-small" 
-                      alt="京东" 
-                    />
-                    <img 
-                      v-else-if="fund.source === 'observe'" 
-                      :src="eyeIcon" 
-                      class="source-icon-small" 
-                      alt="观察" 
-                    />
-                  </div>
-                  <div class="fund-name-middle">
-                    <span 
-                      v-if="fund.isQDII" 
-                      class="qdii-tag"
-                    >
-                      QD
-                    </span>
-                  </div>
-                  <div class="fund-name-right">
-                    {{ fund.name }}
-                  </div>
-                </div>
-              </div>
-              
-              <!-- 第二行：基金代码 和 行业板块 -->
-              <div class="mobile-item-row mobile-item-row-2">
-                <div class="fund-code">{{ fund.code }}</div>
-                <div class="fund-sectors">
-                  {{ fund.industrySectors || '未设置' }}
-                </div>
-              </div>
-              
-              <!-- 第三行：涨跌幅模块 -->
-              <div class="mobile-item-row mobile-item-row-3">
-                <div class="index-change">
-                  <van-icon :name="fund.todayChange && parseFloat(fund.todayChange) >= 0 ? 'arrow-up' : 'arrow-down'" size="14" />
-                  <span>{{ fund.todayChange ? (parseFloat(fund.todayChange) >= 0 ? '+' : '') + fund.todayChange + '%' : '--' }}</span>
-                </div>
-              </div>
-              
-              <!-- 第四行：趋势预测 -->
-              <div class="mobile-item-row mobile-item-row-4" v-if="uiMode === 'full' && fund.trendPrediction">
-                <div class="trend-prediction">
-                  <span class="trend-item trend-item-vertical">
-                    <span class="trend-text" :class="fund.trendPrediction.trend === 'up' ? 'up' : fund.trendPrediction.trend === 'down' ? 'down' : ''">
-                      {{ fund.trendPrediction.trend === 'up' ? '看涨' : fund.trendPrediction.trend === 'down' ? '看跌' : '震荡' }}
-                    </span>
-                    <span class="trend-value" :class="fund.todayChange && parseFloat(fund.todayChange) >= 0 ? 'up' : 'down'">
-                      {{ fund.currentValue?.toFixed(3) || '--' }}
-                    </span>
-                  </span>
-                  <span class="trend-item trend-item-vertical">
-                    <span class="trend-label">支撑</span>
-                    <span class="trend-value down">{{ fund.trendPrediction.supportLevel?.toFixed(2) || '--' }}</span>
-                  </span>
-                  <span class="trend-item trend-item-vertical">
-                    <span class="trend-label">阻力</span>
-                    <span class="trend-value up">{{ fund.trendPrediction.resistanceLevel?.toFixed(2) || '--' }}</span>
-                  </span>
-                </div>
-              </div>
-              <div class="index-holdings mobile-only" v-if="uiMode === 'full'" @click="openTopHoldings(fund, $event)">
-                <span class="top-holdings-label">前十大重仓股</span>
-              </div>
-              <div class="intraday-section mobile-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
-                <span class="intraday-label-mobile">
-                  <van-icon name="chart-trending-o" size="12" />
-                  当日分时图
-                </span>
-              </div>
-              <div class="added-gain-section mobile-only" v-if="fund.addedGain !== undefined">
-                <div class="added-gain-badge mobile-added-gain" :class="fund.addedGain >= 0 ? 'up' : 'down'">
-                  <span>累计{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%</span>
-                </div>
-              </div>
-            </div>
-            <div class="index-holdings web-only" v-if="uiMode === 'full'" @click="openTopHoldings(fund, $event)">
-              <span class="top-holdings-label">前10大重仓股 <span class="top-holdings-arrow">›</span></span>
-            </div>
-            <div class="intraday-section web-only" v-if="uiMode === 'full'" @click="openIntradayModal(fund, $event)">
-              <span class="intraday-label">
-                <van-icon name="chart-trending-o" size="12" />
-                当日分时估值
-              </span>
-            </div>
-            <div class="added-gain-section web-only" v-if="fund.addedGain !== undefined">
-              <div class="added-gain-badge" :class="fund.addedGain >= 0 ? 'up' : 'down'">
-                <van-icon :name="fund.addedGain >= 0 ? 'arrow-up' : 'arrow-down'" size="14" />
-                <span>添加后涨跌幅{{ fund.addedGain >= 0 ? '+' : '' }}{{ fund.addedGain.toFixed(2) }}%</span>
-              </div>
-            </div>
-          </div>
+            @open-top-holdings="openTopHoldings(fund, $event)"
+            @open-intraday-modal="openIntradayModal(fund, $event)"
+          />
         </div>
       </div>
             <!-- 大盘指数概览 - 交易终端风格 -->
@@ -1649,6 +1266,38 @@ function goToDetail(code: string) {
   display: flex;
   gap: 8px;
   margin-left: 12px;
+  align-items: center;
+}
+
+.reference-ma-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 6px;
+  margin-left: 8px;
+}
+
+.reference-ma-label {
+  font-size: 12px;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.reference-ma-value {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-number);
+}
+
+.reference-ma-value.up {
+  color: #3b82f6;
+}
+
+.reference-ma-value.down {
+  color: #3b82f6;
 }
 
 .ui-mode-toggle {

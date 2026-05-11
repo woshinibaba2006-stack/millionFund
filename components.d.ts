@@ -9,6 +9,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     FundCard: typeof import('./src/components/FundCard.vue')['default']
+    FundGridItem: typeof import('./src/components/FundGridItem.vue')['default']
     OKXChart: typeof import('./src/components/OKXChart.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

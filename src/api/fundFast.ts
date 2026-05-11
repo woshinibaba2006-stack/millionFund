@@ -301,7 +301,7 @@ export interface IntradayPoint {
   growth: number
 }
 
-export async function fetchIntradayData(code: string): Promise<IntradayPoint[] | null> {
+export async function fetchIntradayData(code: string, forceRefresh = false): Promise<IntradayPoint[] | null> {
   // [WHY] 分时数据实时性要求高，交易时间不做缓存，非交易时间可短暂缓存
   const now = new Date()
   const hour = now.getHours()
@@ -313,12 +313,14 @@ export async function fetchIntradayData(code: string): Promise<IntradayPoint[] |
     (hour === 14)
 
   const cacheKey = `intraday_${code}`
-  if (!isTradingTime) {
+  // [WHY] 强制刷新时跳过缓存，确保获取最新数据
+  if (!forceRefresh && !isTradingTime) {
     const cached = cache.get<IntradayPoint[]>(cacheKey)
     if (cached) return cached
   }
 
   try {
+    // [WHY] 添加时间戳避免浏览器缓存，确保获取最新数据
     const url = `https://web.ifzq.gtimg.cn/fund/newfund/fundSsgz/getSsgz?app=web&symbol=jj${code}&_=${Date.now()}`
     const response = await fetch(url)
     if (!response.ok) return null
