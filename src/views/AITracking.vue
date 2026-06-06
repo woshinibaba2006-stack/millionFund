@@ -3,10 +3,22 @@
     <div class="page-header">
       <h1 class="page-title">
         AI 追踪
-        <span class="success-rate-title" v-if="records.length > 0">调仓成功率</span>
-        <span class="success-rate" v-if="records.length > 0">({{ successRate }}%)</span>
+        <span class="success-rate web-only" v-if="records.length > 0">调仓成功率({{ successRate }}%)</span>
+        <span class="success-rate mobile-only" v-if="records.length > 0">{{ successRate }}%</span>
       </h1>
       <div class="header-actions">
+        <div class="ui-mode-toggle">
+          <span 
+            class="ui-mode-btn" 
+            :class="{ active: uiMode === 'simple' }"
+            @click="uiMode = 'simple'"
+          >简</span>
+          <span 
+            class="ui-mode-btn" 
+            :class="{ active: uiMode === 'full' }"
+            @click="uiMode = 'full'"
+          >全</span>
+        </div>
         <van-icon name="replay" size="20" @click="refreshPrices" />
         <van-button size="small" type="primary" @click="showAddModal = true" style="margin-left: 8px;">
           <van-icon name="plus" /> 添加
@@ -19,47 +31,83 @@
         v-for="record in records" 
         :key="record.id" 
         class="record-card"
+        :class="{ 'simple-mode': uiMode === 'simple' }"
         @click="selectRecord(record)"
       >
-        <div class="record-header">
-          <span class="record-date">{{ formatDate(record.date) }}</span>
-          <span class="record-status" :class="getStatusClass(record)">{{ getStatusText(record) }}</span>
-          <span class="record-calc" v-html="getCalcProcessCombined(record)"></span>
-        </div>
-        <div class="record-content">
-          <div class="fund-item sell">
-            <div class="fund-label">卖</div>
-            <div class="fund-info">
-              <div class="fund-name">{{ record.sellName || record.sellCode }}</div>
-              <div class="fund-row">
-                <span class="fund-code">{{ record.sellCode }}</span>
-                <span class="fund-change-mobile" :class="getChangeClass(record, 'sell')">
-                  {{ getChangeText(record, 'sell') }}
-                </span>
+        <!-- 简版UI -->
+        <div v-if="uiMode === 'simple'" class="record-simple">
+          <!-- 网页端简版UI -->
+          <div class="record-simple-web">
+            <span class="simple-date">{{ formatDate(record.date) }}</span>
+            <span class="simple-status" :class="getStatusClass(record)">{{ getStatusText(record) }}</span>
+            <div class="simple-funds">
+              <div class="simple-fund-item">
+                <span class="simple-label sell">卖</span>
+                <span class="simple-fund-name">{{ record.sellName || record.sellCode }}</span>
+                <span class="simple-change" :class="getChangeClass(record, 'sell')">{{ getChangeText(record, 'sell') }}</span>
+              </div>
+              <div class="simple-fund-item">
+                <span class="simple-label buy">买</span>
+                <span class="simple-fund-name">{{ record.buyName || record.buyCode }}</span>
+                <span class="simple-change" :class="getChangeClass(record, 'buy')">{{ getChangeText(record, 'buy') }}</span>
               </div>
             </div>
-            <div class="fund-change-right" :class="getChangeClass(record, 'sell')">
-              {{ getChangeText(record, 'sell') }}
-            </div>
+            <span class="simple-delete" @click.stop="deleteRecord(record.id)">
+              <van-icon name="delete-o" />
+            </span>
           </div>
-          <div class="fund-item buy">
-            <div class="fund-label">买</div>
-            <div class="fund-info">
-              <div class="fund-name">{{ record.buyName || record.buyCode }}</div>
-              <div class="fund-row">
-                <span class="fund-code">{{ record.buyCode }}</span>
-                <span class="fund-change-mobile" :class="getChangeClass(record, 'buy')">
-                  {{ getChangeText(record, 'buy') }}
-                </span>
-              </div>
-            </div>
-            <div class="fund-change-right" :class="getChangeClass(record, 'buy')">
-              {{ getChangeText(record, 'buy') }}
-            </div>
+          <!-- 移动端简版UI -->
+          <div class="record-simple-mobile">
+            <span class="simple-sell-name">{{ record.sellName || record.sellCode }}</span>
+            <span class="simple-change sell" :class="getChangeClass(record, 'sell')">{{ getChangeText(record, 'sell') }}</span>
+            <span class="simple-arrow">→</span>
+            <span class="simple-buy-name">{{ record.buyName || record.buyCode }}</span>
+            <span class="simple-change buy" :class="getChangeClass(record, 'buy')">{{ getChangeText(record, 'buy') }}</span>
           </div>
         </div>
-        <div class="record-actions">
-          <van-icon name="delete-o" @click.stop="deleteRecord(record.id)" />
+        
+        <!-- 全版UI -->
+        <div v-else>
+          <div class="record-header">
+            <span class="record-date">{{ formatDate(record.date) }}</span>
+            <span class="record-status" :class="getStatusClass(record)">{{ getStatusText(record) }}</span>
+            <span class="record-calc" v-html="getCalcProcessCombined(record)"></span>
+          </div>
+          <div class="record-content">
+            <div class="fund-item sell">
+              <div class="fund-label">卖</div>
+              <div class="fund-info">
+                <div class="fund-name">{{ record.sellName || record.sellCode }}</div>
+                <div class="fund-row">
+                  <span class="fund-code">{{ record.sellCode }}</span>
+                  <span class="fund-change-mobile" :class="getChangeClass(record, 'sell')">
+                    {{ getChangeText(record, 'sell') }}
+                  </span>
+                </div>
+              </div>
+              <div class="fund-change-right" :class="getChangeClass(record, 'sell')">
+                {{ getChangeText(record, 'sell') }}
+              </div>
+            </div>
+            <div class="fund-item buy">
+              <div class="fund-label">买</div>
+              <div class="fund-info">
+                <div class="fund-name">{{ record.buyName || record.buyCode }}</div>
+                <div class="fund-row">
+                  <span class="fund-code">{{ record.buyCode }}</span>
+                  <span class="fund-change-mobile" :class="getChangeClass(record, 'buy')">
+                    {{ getChangeText(record, 'buy') }}
+                  </span>
+                </div>
+              </div>
+              <div class="fund-change-right" :class="getChangeClass(record, 'buy')">
+                {{ getChangeText(record, 'buy') }}
+              </div>
+            </div>
+          </div>
+          <div class="record-actions">
+            <van-icon name="delete-o" @click.stop="deleteRecord(record.id)" />
+          </div>
         </div>
       </div>
     </div>
@@ -115,6 +163,8 @@ import { useAITrackingStore, type AITrackingRecord } from '@/stores/aiTracking'
 import { fetchFundAccurateData, fetchNetValueHistoryFast } from '@/api/fundFast'
 
 const aiTrackingStore = useAITrackingStore()
+
+const uiMode = ref<'simple' | 'full'>('simple')
 
 const records = computed(() => aiTrackingStore.records)
 
@@ -535,6 +585,47 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
+@media (max-width: 768px) {
+  .web-only {
+    display: none;
+  }
+  .mobile-only {
+    display: inline;
+  }
+}
+
+@media (min-width: 769px) {
+  .web-only {
+    display: inline;
+  }
+  .mobile-only {
+    display: none;
+  }
+}
+
+.ui-mode-toggle {
+  display: flex;
+  align-items: center;
+  background: var(--bg-primary, #f5f5f5);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-light, #e0e0e0);
+  margin-right: 8px;
+}
+
+.ui-mode-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ui-mode-btn.active {
+  background: var(--primary-color);
+  color: #fff;
+}
+
 .records-list {
   display: flex;
   flex-direction: column;
@@ -549,6 +640,153 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 12px;
   position: relative;
+}
+
+.record-card.simple-mode {
+  padding: 8px 12px;
+}
+
+/* 简版UI - 默认隐藏移动端，显示网页端 */
+.record-simple-mobile {
+  display: none;
+}
+
+.record-simple-web {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.simple-date {
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 60px;
+}
+
+.simple-status {
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 60px;
+  text-align: center;
+}
+
+.simple-status.success {
+  color: #07c160;
+}
+
+.simple-status.failed {
+  color: #ee0a24;
+}
+
+.simple-status.pending {
+  color: #999;
+}
+
+.simple-funds {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: 16px;
+}
+
+.simple-fund-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.simple-label {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.simple-label.sell {
+  background: #ee0a24;
+}
+
+.simple-label.buy {
+  background: #07c160;
+}
+
+.simple-fund-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.simple-change {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  min-width: 55px;
+  text-align: right;
+}
+
+.simple-change.up {
+  color: #ee0a24;
+  background: rgba(238, 10, 36, 0.1);
+}
+
+.simple-change.down {
+  color: #07c160;
+  background: rgba(7, 193, 96, 0.1);
+}
+
+.simple-arrow {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.simple-delete {
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.simple-delete:hover {
+  color: #ee0a24;
+}
+
+/* 移动端样式 */
+@media (max-width: 768px) {
+  .record-simple-mobile {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .record-simple-web {
+    display: none;
+  }
+
+  .simple-sell-name,
+  .simple-buy-name {
+    flex-shrink: 0;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-primary);
+  }
 }
 
 .record-date {
