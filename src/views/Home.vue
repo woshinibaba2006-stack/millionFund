@@ -242,6 +242,31 @@ const tradingStatus = computed(() => {
 const globalIndices = ref<GlobalIndex[]>([])
 const showGlobalIndices = ref(false)
 
+// [WHAT] 顶部展示指数（上证指数、创业板指、纳斯达克）
+const topIndices = computed(() => {
+  const result: MarketIndexSimple[] = []
+  // 上证指数
+  const shIndex = indices.value.find(idx => idx.code === '000001')
+  // 创业板指
+  const cyIndex = indices.value.find(idx => idx.code === '399006')
+  // 纳斯达克（从全球指数中查找）
+  const nasdaqIndex = globalIndices.value.find(idx => idx.name.includes('纳斯达克'))
+  
+  if (shIndex) result.push(shIndex)
+  if (cyIndex) result.push(cyIndex)
+  if (nasdaqIndex) {
+    result.push({
+      code: nasdaqIndex.code,
+      name: '纳斯达克',
+      current: nasdaqIndex.price,
+      change: nasdaqIndex.price * nasdaqIndex.changePercent / 100,
+      changePercent: nasdaqIndex.changePercent
+    })
+  }
+  
+  return result
+})
+
 // [WHAT] 合并后的指数列表（大盘指数 + 全球指数）
 const combinedIndices = computed(() => {
   // 使用Set存储已添加的指数名称，确保去重
@@ -588,11 +613,21 @@ function goToDetail(code: string) {
             {{ hs300ChangePercent >= 0 ? '+' : '' }}{{ hs300ChangePercent.toFixed(2) }}%
           </span>
         </div>
-      </div>
-      <!-- 网页端：显示搜索框 -->
-      <div class="search-bar web-only" @click="goToSearch">
-        <van-icon name="search" size="16" />
-        <span>搜索基金代码/名称</span>
+        <!-- 网页端：顶部指数横向显示 -->
+        <div class="top-indices-bar web-only" v-if="topIndices.length > 0">
+          <div 
+            v-for="index in topIndices" 
+            :key="index.code"
+            class="top-index-item"
+            :class="[index.changePercent >= 0 ? 'up' : 'down']"
+            @click="router.push('/market')"
+          >
+            <span class="top-index-name">{{ index.name }}</span>
+            <span class="top-index-change">
+              {{ index.changePercent >= 0 ? '+' : '' }}{{ index.changePercent.toFixed(2) }}%
+            </span>
+          </div>
+        </div>
       </div>
       <div class="header-right">
         <!-- 网页端：显示设置按钮 -->
@@ -991,12 +1026,12 @@ function goToDetail(code: string) {
         />
       </template>
 
-      <!-- 空状态 -->
+      <!-- 空状态 - 移动端显示添加按钮，网页端完全隐藏 -->
       <van-empty
-        v-else
+        v-if="fundStore.watchlist.length === 0"
         image="search"
         description="暂无自选基金"
-        class="web-only"
+        class="mobile-only"
       >
         <van-button round type="primary" @click="goToSearch">
           添加基金
@@ -1147,9 +1182,10 @@ function goToDetail(code: string) {
 .top-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  padding: 16px 16px;
-  padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  padding: 10px 16px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
   background: linear-gradient(180deg, var(--bg-secondary) 0%, rgba(22, 27, 34, 0.95) 100%);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -1163,6 +1199,7 @@ function goToDetail(code: string) {
   flex-shrink: 0;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
 }
 
 .header-ma-badge {
@@ -1197,6 +1234,63 @@ function goToDetail(code: string) {
 .search-bar:active {
   background: var(--bg-active);
   border-color: var(--color-primary);
+}
+
+/* 顶部指数样式 - 网页端横向方框 */
+.top-indices-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 20px;
+  flex: 1;
+}
+
+.top-index-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 13px;
+}
+
+.top-index-item:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+.top-index-item.up {
+  border-color: rgba(255, 107, 107, 0.3);
+  background: linear-gradient(135deg, var(--bg-primary) 0%, rgba(255, 107, 107, 0.08) 100%);
+}
+
+.top-index-item.down {
+  border-color: rgba(81, 207, 102, 0.3);
+  background: linear-gradient(135deg, var(--bg-primary) 0%, rgba(81, 207, 102, 0.08) 100%);
+}
+
+.top-index-name {
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.top-index-change {
+  font-weight: 700;
+  font-family: var(--font-number);
+  white-space: nowrap;
+}
+
+.top-index-item.up .top-index-change {
+  color: var(--color-up);
+}
+
+.top-index-item.down .top-index-change {
+  color: var(--color-down);
 }
 
 .header-right {
