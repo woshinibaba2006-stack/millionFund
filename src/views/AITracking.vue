@@ -28,11 +28,21 @@
 
     <div class="records-list" v-if="records.length > 0">
       <div 
-        v-for="record in records" 
+        v-for="(record, index) in records" 
         :key="record.id" 
         class="record-card"
-        :class="{ 'simple-mode': uiMode === 'simple' }"
+        :class="{ 
+          'simple-mode': uiMode === 'simple',
+          'dragging': draggingIndex === index,
+          'drag-over': dragOverIndex === index
+        }"
+        :draggable="uiMode === 'simple'"
         @click="selectRecord(record)"
+        @dragstart="handleDragStart($event, index)"
+        @dragover="handleDragOver($event, index)"
+        @dragleave="handleDragLeave"
+        @drop="handleDrop($event, index)"
+        @dragend="handleDragEnd"
       >
         <!-- 简版UI -->
         <div v-if="uiMode === 'simple'" class="record-simple">
@@ -206,6 +216,10 @@ const newRecord = ref<NewRecord>({
   buyCode: '',
   buyName: ''
 })
+
+// 拖拽排序相关状态
+const draggingIndex = ref<number | null>(null)
+const dragOverIndex = ref<number | null>(null)
 
 function resetNewRecord() {
   newRecord.value = {
@@ -505,6 +519,62 @@ function getStatusText(record: AITrackingRecord): string {
   return buyChange >= sellChange ? '调仓成功' : '调仓失败'
 }
 
+// 拖拽排序相关函数
+function handleDragStart(event: DragEvent, index: number) {
+  if (uiMode.value !== 'simple') return
+  
+  draggingIndex.value = index
+  event.dataTransfer?.setData('text/plain', index.toString())
+  
+  // 添加拖拽效果样式
+  if (event.target) {
+    (event.target as HTMLElement).classList.add('dragging')
+  }
+  
+  showToast({ message: '开始拖拽，拖动到目标位置松开', duration: 1500 })
+}
+
+function handleDragOver(event: DragEvent, index: number) {
+  if (uiMode.value !== 'simple') return
+  
+  event.preventDefault()
+  dragOverIndex.value = index
+}
+
+function handleDragLeave() {
+  // 不立即清除，让视觉反馈更持久
+}
+
+function handleDrop(event: DragEvent, targetIndex: number) {
+  if (uiMode.value !== 'simple') return
+  
+  event.preventDefault()
+  
+  if (draggingIndex.value !== null && draggingIndex.value !== targetIndex) {
+    aiTrackingStore.reorderRecords(draggingIndex.value, targetIndex)
+    showToast({ message: '排序已更新', duration: 1000 })
+  }
+  
+  draggingIndex.value = null
+  dragOverIndex.value = null
+}
+
+function handleDragEnd(event: DragEvent) {
+  // 移除拖拽样式
+  if (event.target) {
+    (event.target as HTMLElement).classList.remove('dragging')
+  }
+  
+  // 如果有目标位置，执行排序（fallback）
+  if (draggingIndex.value !== null && dragOverIndex.value !== null && draggingIndex.value !== dragOverIndex.value) {
+    aiTrackingStore.reorderRecords(draggingIndex.value, dragOverIndex.value)
+    showToast({ message: '排序已更新', duration: 1000 })
+  }
+  
+  draggingIndex.value = null
+  dragOverIndex.value = null
+}
+
 function getStatusClass(record: AITrackingRecord): string {
   const sellPrice = fundPrices.value[record.sellCode]
   const buyPrice = fundPrices.value[record.buyCode]
@@ -640,10 +710,32 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 12px;
   position: relative;
+  transition: all 0.2s ease;
 }
 
 .record-card.simple-mode {
   padding: 8px 12px;
+}
+
+/* 拖拽状态样式 */
+.record-card.dragging {
+  opacity: 0.5;
+  background: var(--bg-card);
+  transform: scale(1.02);
+}
+
+.record-card.dragging::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px dashed var(--primary-color);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.record-card.drag-over {
+  border: 2px solid var(--primary-color);
+  background: rgba(var(--primary-color-rgb), 0.1);
 }
 
 /* 简版UI - 默认隐藏移动端，显示网页端 */

@@ -85,6 +85,20 @@ export const useAITrackingStore = defineStore('aiTracking', () => {
     saveToLocalStorage()
   }
 
+  function reorderRecords(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return
+    if (fromIndex < 0 || toIndex < 0) return
+    if (fromIndex >= records.value.length || toIndex >= records.value.length) return
+
+    const [movedRecord] = records.value.splice(fromIndex, 1)
+
+    // 如果 fromIndex < toIndex，移除元素后 toIndex 需要减 1
+    const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex
+
+    records.value.splice(adjustedToIndex, 0, movedRecord)
+    saveToLocalStorage()
+  }
+
   loadFromLocalStorage()
 
   return {
@@ -96,6 +110,7 @@ export const useAITrackingStore = defineStore('aiTracking', () => {
     confirmRecordNav,
     importRecords,
     clearAll,
+    reorderRecords,
     loadFromLocalStorage
   }
 })
