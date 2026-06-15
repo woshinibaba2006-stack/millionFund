@@ -1,0 +1,84 @@
+{
+  "version": "1.0",
+  "exportDate": "2026-06-15T09:40:11.531Z",
+  "holdings": [
+    {
+      "code": "006555",
+      "name": "浦银安盛全球智能科技(QDII)A",
+      "buyNetValue": 2.783836436041799,
+      "shares": 19244.331062845395,
+      "buyDate": "2026-06-10",
+      "holdingDays": 0,
+      "industrySectors": "",
+      "createdAt": 1781516407066,
+      "source": "manual",
+      "isQDII": true
+    },
+    {
+      "code": "024239",
+      "name": "华夏全球科技先锋混合(QDII)C",
+      "buyNetValue": 2.911615579131183,
+      "shares": 33156.09749169105,
+      "buyDate": "2026-06-10",
+      "holdingDays": 0,
+      "industrySectors": "",
+      "createdAt": 1781516407869,
+      "source": "manual",
+      "isQDII": true
+    },
+    {
+      "code": "016702",
+      "name": "银华海外数字经济量化选股混合发起式(QDII)C",
+      "buyNetValue": 1.7862391456510867,
+      "shares": 47725.9723075469,
+      "buyDate": "2026-06-10",
+      "holdingDays": 0,
+      "industrySectors": "",
+      "createdAt": 1781516408578,
+      "source": "manual",
+      "isQDII": true
+    },
+    {
+      "code": "020465",
+      "name": "招商中证半导体产业ETF发起式联接C",
+      "buyNetValue": 3.253667129872498,
+      "shares": 15166.360918405851,
+      "buyDate": "2026-06-11",
+      "holdingDays": 0,
+      "industrySectors": "",
+      "createdAt": 1781516409590,
+      "source": "manual",
+      "isQDII": false
+    },
+    {
+      "code": "021277",
+      "name": "广发全球精选股票(QDII)人民币C",
+      "buyNetValue": 6.387295507539251,
+      "shares": 6168.494937097269,
+      "buyDate": "2026-06-10",
+      "holdingDays": 0,
+      "industrySectors": "",
+      "createdAt": 1781516410291,
+      "source": "manual",
+      "isQDII": true
+    },
+    {
+      "code": "017811",
+      "name": "东方人工智能主题混合C",
+      "buyNetValue": 2.806676729997155,
+      "shares": 40869.50904392765,
+      "buyDate": "2026-06-11",
+      "holdingDays": 0,
+      "industrySectors": "",
+      "createdAt": 1781516411028,
+      "source": "manual",
+      "isQDII": false
+    }
+  ],
+  "summary": {
+    "totalValue": 500498.74000000005,
+    "totalProfit": 61684.06999999999,
+    "totalProfitRate": 14.05697535134821,
+    "todayProfit": 0
+  }
+}
