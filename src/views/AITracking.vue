@@ -1,28 +1,38 @@
 <template>
   <div class="ai-tracking-page">
     <div class="page-header">
-      <h1 class="page-title">
-        AI 追踪
-        <span class="success-rate web-only" v-if="records.length > 0">调仓成功率({{ successRate }}%)</span>
-        <span class="success-rate mobile-only" v-if="records.length > 0">{{ successRate }}%</span>
-      </h1>
-      <div class="header-actions">
-        <div class="ui-mode-toggle">
-          <span 
-            class="ui-mode-btn" 
-            :class="{ active: uiMode === 'simple' }"
-            @click="uiMode = 'simple'"
-          >简</span>
-          <span 
-            class="ui-mode-btn" 
-            :class="{ active: uiMode === 'full' }"
-            @click="uiMode = 'full'"
-          >全</span>
+      <!-- 第一行：标题 + 操作按钮 -->
+      <div class="header-row-1">
+        <h1 class="page-title">AI 追踪</h1>
+        <div class="header-actions">
+          <div class="ui-mode-toggle">
+            <span 
+              class="ui-mode-btn" 
+              :class="{ active: uiMode === 'simple' }"
+              @click="uiMode = 'simple'"
+            >简</span>
+            <span 
+              class="ui-mode-btn" 
+              :class="{ active: uiMode === 'full' }"
+              @click="uiMode = 'full'"
+            >全</span>
+          </div>
+          <van-icon name="replay" size="20" @click="refreshPrices" />
+          <van-button size="small" type="primary" @click="showAddModal = true">
+            <van-icon name="plus" /> 添加
+          </van-button>
         </div>
-        <van-icon name="replay" size="20" @click="refreshPrices" />
-        <van-button size="small" type="primary" @click="showAddModal = true" style="margin-left: 8px;">
-          <van-icon name="plus" /> 添加
-        </van-button>
+      </div>
+      <!-- 第二行：统计数据 - 横向显示 -->
+      <div class="header-row-2 mobile-only" v-if="records.length > 0">
+        <span class="stat-item"><label>调仓成功率</label><span class="value">{{ successRate }}%</span></span>
+        <span class="stat-divider">|</span>
+        <span class="stat-item"><label>累计</label><span class="value" :class="totalChangeClass">{{ totalChangeText }}</span></span>
+      </div>
+      <!-- 网页端统计 -->
+      <div class="header-stats web-only" v-if="records.length > 0">
+        <span class="success-rate">调仓成功率({{ successRate }}%)</span>
+        <span class="total-change" :class="totalChangeClass">累计{{ totalChangeText }}</span>
       </div>
     </div>
 
@@ -184,23 +194,53 @@ const records = computed(() => aiTrackingStore.records)
 
 const successRate = computed(() => {
   if (records.value.length === 0) return 0
-  
+
   let successCount = 0
   for (const record of records.value) {
     const sellPrice = fundPrices.value[record.sellCode]
     const buyPrice = fundPrices.value[record.buyCode]
-    
+
     if (!sellPrice || !buyPrice || !record.sellNav || !record.buyNav) continue
-    
+
     const sellChange = ((sellPrice - record.sellNav) / record.sellNav) * 100
     const buyChange = ((buyPrice - record.buyNav) / record.buyNav) * 100
-    
+
     if (buyChange >= sellChange) {
       successCount++
     }
   }
-  
+
   return Math.round((successCount / records.value.length) * 100)
+})
+
+// 计算总累计涨跌幅
+const totalChange = computed(() => {
+  if (records.value.length === 0) return 0
+
+  let total = 0
+  for (const record of records.value) {
+    const sellPrice = fundPrices.value[record.sellCode]
+    const buyPrice = fundPrices.value[record.buyCode]
+
+    if (!sellPrice || !buyPrice || !record.sellNav || !record.buyNav) continue
+
+    const sellChange = ((sellPrice - record.sellNav) / record.sellNav) * 100
+    const buyChange = ((buyPrice - record.buyNav) / record.buyNav) * 100
+
+    const diff = buyChange - sellChange
+    total += diff
+  }
+
+  return total
+})
+
+const totalChangeText = computed(() => {
+  const value = totalChange.value
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+})
+
+const totalChangeClass = computed(() => {
+  return totalChange.value >= 0 ? 'up' : 'down'
 })
 
 const showAddModal = ref(false)
@@ -722,18 +762,77 @@ onUnmounted(() => {
 
 .page-header {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 12px 16px;
+}
+
+/* 第一行：标题 + 操作按钮 */
+.header-row-1 {
+  display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 10px;
-  flex-shrink: 0;
+  width: 100%;
 }
 
 .page-title {
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+}
+
+/* 第二行：统计数据 - 与record-card simple-mode一致 */
+.header-row-2 {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 16px !important;
+  padding: 0 !important;
+  background: var(--bg-card) !important;
+  border-radius: var(--radius-sm) !important;
+  margin: 0 12px !important;
+  width: auto !important;
+  box-sizing: border-box !important;
+}
+
+.stat-item {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 0;
+}
+
+.stat-divider {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.stat-item label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.stat-item .value {
+  font-weight: 600;
+}
+
+.stat-item .up {
+  color: var(--color-up);
+}
+
+.stat-item .down {
+  color: var(--color-down);
+}
+
+/* 网页端统计 */
+.header-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .success-rate-title {
@@ -747,7 +846,23 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-secondary);
-  margin-left: 8px;
+}
+
+.total-change {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.total-change.up {
+  color: var(--color-up);
+  background: var(--color-up-bg);
+}
+
+.total-change.down {
+  color: var(--color-down);
+  background: var(--color-down-bg);
 }
 
 .header-actions {
