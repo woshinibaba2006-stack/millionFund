@@ -14,7 +14,7 @@ import {
 } from '@/utils/storage'
 import { fetchFundAccurateData, type FundAccurateData } from '@/api/fundFast'
 import { fetchNetValueHistoryFast } from '@/api/fundFast'
-import { predictTrend, type TrendPrediction } from '@/utils/statistics'
+import { predictTrend, calculateReturnAnalysis, calculateFundScore, type TrendPrediction, type FundScore } from '@/utils/statistics'
 
 /** 持仓项（包含实时估值和收益计算） */
 export interface HoldingWithProfit extends HoldingRecord {
@@ -42,6 +42,8 @@ export interface HoldingWithProfit extends HoldingRecord {
   isUpdated?: boolean
   /** 添加后累计涨跌幅（仅观察账户） */
   addedGain?: number
+  /** 综合评分 */
+  fundScore?: FundScore
 }
 
 export const useHoldingStore = defineStore('holding', () => {
@@ -216,10 +218,11 @@ export const useHoldingStore = defineStore('holding', () => {
 
     const profitRate = marketValue > 0 ? profit / marketValue * 100 : 0
 
-    // 计算趋势预测
+    // 计算趋势预测和综合评分
     let trendPrediction: TrendPrediction | undefined
+    let fundScore: FundScore | undefined
     try {
-      const historyResult = await fetchNetValueHistoryFast(code, 60)
+      const historyResult = await fetchNetValueHistoryFast(code, 90)
       const historyData = historyResult.records || []
       if (historyData && historyData.length >= 30) {
         const netValuePoints = historyData.map(item => ({
@@ -228,9 +231,13 @@ export const useHoldingStore = defineStore('holding', () => {
           change: item.changeRate
         }))
         trendPrediction = predictTrend(netValuePoints)
+
+        // 计算综合评分
+        const returnAnalysis = calculateReturnAnalysis(netValuePoints)
+        fundScore = calculateFundScore(returnAnalysis)
       }
     } catch (error) {
-      console.error('计算趋势预测失败:', error)
+      console.error('计算趋势预测和评分失败:', error)
     }
 
     // [WHAT] 判断是否已更新：根据净值日期判断（QDII 基金允许晚一天更新）
@@ -281,7 +288,8 @@ export const useHoldingStore = defineStore('holding', () => {
       dataSource: data.dataSource,
       valueDate: data.navDate || data.estimateTime?.split(' ')[0],
       isUpdated,
-      addedGain
+      addedGain,
+      fundScore
     }
 
     // 保存更新后的持仓到本地存储

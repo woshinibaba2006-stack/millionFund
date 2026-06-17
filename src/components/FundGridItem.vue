@@ -49,7 +49,10 @@ function getFundNameClass(fund: any, tradingSession?: string) {
     </div>
     <div class="index-content web-only">
       <div class="index-left">
-        <div class="fund-code">{{ fund.code }}</div>
+        <div class="fund-code-wrapper">
+          <div class="fund-code">{{ fund.code }}</div>
+          <span v-if="fund.fundScore" class="score-level" :class="'level-' + fund.fundScore.level">{{ fund.fundScore.level }}</span>
+        </div>
         <div class="fund-sectors">{{ fund.industrySectors || '未设置' }}</div>
       </div>
       <div class="index-right">
@@ -108,7 +111,10 @@ function getFundNameClass(fund: any, tradingSession?: string) {
         </div>
       </div>
       <div class="mobile-item-row mobile-item-row-2">
-        <div class="fund-code">{{ fund.code }}</div>
+        <div class="fund-code-wrapper">
+          <div class="fund-code">{{ fund.code }}</div>
+          <span v-if="fund.fundScore" class="score-level" :class="'level-' + fund.fundScore.level">{{ fund.fundScore.level }}</span>
+        </div>
         <div class="fund-sectors">{{ fund.industrySectors || '未设置' }}</div>
       </div>
       <div class="mobile-item-row mobile-item-row-3 mobile-item-row-3-4-container">
@@ -650,6 +656,56 @@ function getFundNameClass(fund: any, tradingSession?: string) {
 
 .added-gain-badge.up { color: var(--color-up); background: rgba(255, 107, 107, 0.12); }
 .added-gain-badge.down { color: var(--color-down); background: rgba(81, 207, 102, 0.12); }
+
+/* 基金评分等级样式 */
+.fund-code-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  justify-content: center;
+}
+
+.fund-code-wrapper .fund-code {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-number);
+  letter-spacing: -0.2px;
+  color: var(--color-primary);
+  padding: 0;
+  margin-bottom: 0;
+}
+
+.score-level {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0;
+  border-radius: 4px;
+}
+
+.score-level.level-S {
+  background: rgba(255, 107, 107, 0.1);
+  color: #ff6b6b;
+}
+
+.score-level.level-A {
+  background: rgba(255, 167, 38, 0.1);
+  color: #ffa726;
+}
+
+.score-level.level-B {
+  background: rgba(102, 187, 106, 0.1);
+  color: #66bb6a;
+}
+
+.score-level.level-C {
+  background: rgba(66, 165, 245, 0.1);
+  color: #42a5f5;
+}
+
+.score-level.level-D {
+  background: rgba(120, 144, 156, 0.1);
+  color: #78909c;
+}
 
 .mobile-added-gain { font-size: 10px; gap: 0; }
 
