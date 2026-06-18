@@ -866,6 +866,11 @@ onUnmounted(() => {
   .mobile-only {
     display: inline;
   }
+  
+  .ai-tracking-page {
+    padding-left: 2px;
+    padding-right: 2px;
+  }
 }
 
 @media (min-width: 769px) {
@@ -911,7 +916,7 @@ onUnmounted(() => {
 .records-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
   overflow-y: auto;
   flex: 1;
   padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
@@ -926,7 +931,7 @@ onUnmounted(() => {
 }
 
 .record-card.simple-mode {
-  padding: 8px 12px;
+  padding: 2px 4px;
 }
 
 /* 拖拽状态样式 */
@@ -958,6 +963,7 @@ onUnmounted(() => {
 .record-simple-web {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   font-size: 13px;
 }
@@ -1081,6 +1087,7 @@ onUnmounted(() => {
   .record-simple-mobile {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     font-size: 13px;
     white-space: nowrap;
