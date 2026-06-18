@@ -17,6 +17,14 @@
               @click="uiMode = 'full'"
             >全</span>
           </div>
+          <!-- 拖拽模式按钮 - 仅简版UI显示 -->
+          <van-icon 
+            v-if="uiMode === 'simple'" 
+            name="exchange" 
+            size="20" 
+            :class="{ 'drag-mode-active': dragMode }"
+            @click="toggleDragMode" 
+          />
           <van-icon name="replay" size="20" @click="refreshPrices" />
           <van-button size="small" type="primary" @click="showAddModal = true">
             <van-icon name="plus" /> 添加
@@ -38,10 +46,10 @@
         class="record-card"
         :class="{ 
           'simple-mode': uiMode === 'simple',
-          'dragging': draggingIndex === index,
-          'drag-over': dragOverIndex === index
+          'dragging': dragMode && draggingIndex === index,
+          'drag-over': dragMode && dragOverIndex === index
         }"
-        :draggable="uiMode === 'simple'"
+        :draggable="uiMode === 'simple' && dragMode"
         @click="selectRecord(record)"
         @dragstart="handleDragStart($event, index)"
         @dragover="handleDragOver($event, index)"
@@ -259,6 +267,17 @@ const newRecord = ref<NewRecord>({
 // 拖拽排序相关状态
 const draggingIndex = ref<number | null>(null)
 const dragOverIndex = ref<number | null>(null)
+const dragMode = ref(false)
+
+// 切换拖拽模式
+function toggleDragMode() {
+  dragMode.value = !dragMode.value
+  if (dragMode.value) {
+    showToast({ message: '已进入拖拽模式，点击卡片排序', duration: 2000 })
+  } else {
+    showToast({ message: '已退出拖拽模式', duration: 1500 })
+  }
+}
 
 // 移动端拖拽相关状态
 const touchDragging = ref(false)
@@ -268,7 +287,8 @@ const touchDragElement = ref<HTMLElement | null>(null)
 
 // 移动端touch事件处理
 function handleTouchStart(event: TouchEvent, index: number) {
-  if (uiMode.value !== 'simple') return
+  // 只有在拖拽模式下才处理拖拽事件
+  if (uiMode.value !== 'simple' || !dragMode.value) return
   
   const touch = event.touches[0]
   touchStartY.value = touch.clientY
@@ -281,12 +301,14 @@ function handleTouchStart(event: TouchEvent, index: number) {
   touchDragElement.value = target
   target.classList.add('dragging')
   
-  showToast({ message: '开始拖拽，拖动到目标位置松开', duration: 1500 })
+  showToast({ message: '拖动到目标位置松开', duration: 1500 })
 }
 
 function handleTouchMove(event: TouchEvent) {
-  if (!touchDragging.value || uiMode.value !== 'simple') return
+  // 只有在拖拽模式下才处理拖拽事件
+  if (!touchDragging.value || uiMode.value !== 'simple' || !dragMode.value) return
   
+  // 拖拽模式下禁止滚动
   event.preventDefault()
   
   const touch = event.touches[0]
@@ -321,7 +343,7 @@ function handleTouchMove(event: TouchEvent) {
 }
 
 function handleTouchEnd(event: TouchEvent) {
-  if (!touchDragging.value || uiMode.value !== 'simple') return
+  if (!touchDragging.value || uiMode.value !== 'simple' || !dragMode.value) return
   
   // 执行排序
   if (draggingIndex.value !== null && dragOverIndex.value !== null && draggingIndex.value !== dragOverIndex.value) {
@@ -749,10 +771,13 @@ onUnmounted(() => {
 <style scoped>
 .ai-tracking-page {
   height: 100%;
+  min-height: 100%;
   background: var(--bg-primary);
   padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 16px 16px;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .page-header {
@@ -873,6 +898,14 @@ onUnmounted(() => {
 .ui-mode-btn.active {
   background: var(--primary-color);
   color: #fff;
+}
+
+/* 拖拽模式按钮样式 */
+.drag-mode-active {
+  color: var(--primary-color) !important;
+  background: rgba(var(--primary-color-rgb), 0.1);
+  border-radius: 4px;
+  padding: 2px;
 }
 
 .records-list {

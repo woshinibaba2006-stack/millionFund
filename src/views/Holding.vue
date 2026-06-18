@@ -1222,6 +1222,7 @@ async function refreshHoldings() {
     flex: none;
     margin-bottom: 8px;
     padding: 14px 16px;
+    gap: 0;
   }
   
   .holding-item.placeholder {
@@ -1237,7 +1238,7 @@ async function refreshHoldings() {
   display: grid;
   grid-template-columns: 2fr 1fr 1fr 1fr;
   align-items: center;
-  gap: 8px;
+  gap: 0;
 }
 
 .holding-item.placeholder {
@@ -1699,10 +1700,19 @@ async function refreshHoldings() {
   }
   
   /* 移动端：基金名称样式优化 */
+  .col-name {
+    min-width: 80px;
+    max-width: 150px;
+    flex: 1;
+  }
+  
   .col-name .fund-name {
     font-size: 13px;
     line-height: 1.3;
-    max-height: 2.6em;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   
   .col-name .fund-name-line {
@@ -1828,11 +1838,9 @@ async function refreshHoldings() {
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  white-space: nowrap;
   line-height: 1.4;
-  max-height: 2.8em;
+  max-width: 200px;
 }
 
 .col-name .fund-name-wrapper {
@@ -1886,6 +1894,13 @@ async function refreshHoldings() {
 .col-name .amount {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+/* 基金名称列弹性宽度 */
+.col-name {
+  min-width: 130px;
+  max-width: 250px;
+  flex: 1;
 }
 
 .col-change, .col-today, .col-profit {
