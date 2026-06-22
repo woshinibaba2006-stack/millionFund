@@ -7,6 +7,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { HoldingRecord, HoldingSummary } from '@/types/fund'
 import { getHoldings, saveHoldings } from '@/utils/storage'
+import { getPrevWorkdaySync } from '@/utils/holiday'
 import {
   upsertHolding,
   removeHolding as removeFromStorage,
@@ -154,6 +155,7 @@ export const useHoldingStore = defineStore('holding', () => {
 
     isRefreshing.value = true
     const holdingsList = [...holdings.value]
+    console.log('[refreshAllHoldings] 开始刷新，共', holdingsList.length, '只基金:', holdingsList.map(h => h.code))
 
     try {
       // [WHAT] 并发获取所有基金的准确数据
@@ -200,21 +202,60 @@ export const useHoldingStore = defineStore('holding', () => {
       return
     }
 
-    // [EDGE] 计算份额和服务费
-    let shares = holding.shares
-    const buyNav = holding.buyNetValue > 0 ? holding.buyNetValue : currentValue
+    // [EDGE] 计算份额和服务费 — 记录计算过程以便调试
+    const rawBuyNetValue = holding.buyNetValue
+    const rawMarketValue = holding.marketValue
+    const rawStoredShares = holding.shares
+
+    // 计算买入净值（优先使用持仓记录中的买入净值，否则使用当前净值作为回退）
+    const buyNav = rawBuyNetValue > 0 ? rawBuyNetValue : currentValue
+
+    // 计算持有份额：如果记录中已有份额则直接使用，否则用市值 / 买入净值 计算
+    let shares = rawStoredShares
     if (!shares || shares <= 0) {
-      shares = (holding.marketValue || 0) / (buyNav || 1)
+      const denominator = buyNav || 1
+      const computedShares = (rawMarketValue || 0) / denominator
+      console.log(`计算持有份额: holding.marketValue = ${rawMarketValue}, buyNav = ${buyNav}, shares = marketValue / buyNav = (${rawMarketValue || 0}) / (${denominator}) = ${computedShares}`)
+      shares = computedShares
+    } else {
+      console.log(`使用已有份额: holding.shares = ${shares}`)
     }
+
+    // 已移除买入净值流程的单行日志，避免重复输出
 
     // 严格按照份额和净值计算市值和收益
     const marketValue = shares * currentValue
 
-    // 持有收益 = (当前净值 - 成本净值) × 持有份额
+    // [FIX] 持有收益计算逻辑
+    // 统一使用公式: profit = (当前净值 - 买入净值) × 持有份额
+    // 不需要判断周末/工作日，直接用公式计算即可
     const profit = (currentValue - buyNav) * shares
 
-    // 当日收益 = 持仓市值 × 当日涨跌幅
-    const todayProfit = marketValue * (data.dayChange / 100)
+    // [FIX] 今日收益 = 市值 × 今日涨幅
+    // 按照份额计算: todayProfit = 份额 × 当前净值 × (今日涨幅 / 100)
+    const todayProfit = shares * currentValue * (data.dayChange / 100)
+
+    // [DEBUG] 详细打印计算过程
+    console.log(`========== [收益计算-刷新] ${code} ==========`)
+    console.log(`买入净值 (buyNav): ${buyNav}`)
+    console.log(`持有份额 (shares): ${shares}`)
+    console.log(`--- 使用当前值计算 ---`)
+    console.log(`当前值 (currentValue): ${currentValue} (来源: ${data.dataSource}, 日期: ${data.navDate || data.estimateTime?.split(' ')[0]})`)
+    console.log(`持有收益: (currentValue - buyNav) × shares = (${currentValue} - ${buyNav}) × ${shares} = ${profit}`)
+    if (data.nav > 0) {
+      console.log(`--- 使用历史净值计算 ---`)
+      console.log(`历史净值 (nav): ${data.nav} (日期: ${data.navDate})`)
+      const profitByNav = (data.nav - buyNav) * shares
+      console.log(`持有收益: (nav - buyNav) × shares = (${data.nav} - ${buyNav}) × ${shares} = ${profitByNav}`)
+    }
+    if (data.estimate > 0) {
+      console.log(`--- 使用估值计算 ---`)
+      console.log(`估值 (estimate): ${data.estimate} (日期: ${data.estimateTime})`)
+      const profitByEstimate = (data.estimate - buyNav) * shares
+      console.log(`持有收益: (estimate - buyNav) × shares = (${data.estimate} - ${buyNav}) × ${shares} = ${profitByEstimate}`)
+    }
+    console.log(`今日涨幅: ${data.dayChange}%, 今日收益: todayProfit = shares × currentValue × dayChange = ${shares} × ${currentValue} × ${data.dayChange}% = ${todayProfit}`)
+    console.log(`=============================================`)
 
     const profitRate = marketValue > 0 ? profit / marketValue * 100 : 0
 
@@ -242,21 +283,31 @@ export const useHoldingStore = defineStore('holding', () => {
 
     // [WHAT] 判断是否已更新：根据净值日期判断（QDII 基金允许晚一天更新）
     const today = new Date().toISOString().split('T')[0]
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
 
     // 检查是否有今日净值数据
     const hasTodayNav = data.nav > 0 && data.navDate === today
-    // QDII 基金：如果有昨日净值也视为已更新（因为时差问题）
+
+    // [WHAT] 计算前一个工作日（用于QDII基金判断）
+    // [WHY] 使用节假日API判断，如果是节假日则继续往前推
+    const prevWorkday = getPrevWorkdaySync(today)
+
+    // QDII 基金：如果有前一个工作日净值也视为已更新（因为时差问题）
     const isQDII = holding.isQDII === true
-    const hasYesterdayNavForQDII = isQDII && data.nav > 0 && data.navDate === yesterday
+    const hasPrevWorkdayNavForQDII = isQDII && data.nav > 0 && data.navDate === prevWorkday
 
-    // 如果 dataSource 是 nav 且有今日净值，或者 QDII 有昨日净值
-    const isUpdated = hasTodayNav || hasYesterdayNavForQDII || (data.dataSource === 'nav' && data.navDate === today)
+    // 如果有今日净值，或者 QDII 有前一个工作日净值
+    const isUpdated = hasTodayNav || hasPrevWorkdayNavForQDII
 
-    // [WHAT] 计算添加后累计涨跌幅（与持有收益率公式一致）
+    // [WHAT] 计算添加后累计涨跌幅
+    // 正确公式：(当前净值 - 买入净值) / 买入净值 * 100%
     let addedGain: number | undefined
     if (holding.buyNetValue && holding.buyNetValue > 0 && currentValue > 0) {
-      addedGain = ((currentValue - holding.buyNetValue) / currentValue) * 100
+      addedGain = ((currentValue - holding.buyNetValue) / holding.buyNetValue) * 100
+      // console.log(`========== [收益计算-累计涨幅] ${code} ==========`)
+      // console.log(`  买入净值 (buyNetValue): ${holding.buyNetValue}`)
+      // console.log(`  当前净值 (currentValue): ${currentValue}`)
+      // console.log(`  累计涨幅 (addedGain): (${currentValue} - ${holding.buyNetValue}) / ${holding.buyNetValue} = ${addedGain.toFixed(2)}%`)
+      // console.log(`=============================================`)
     }
 
     // console.log('更新状态判断:', {

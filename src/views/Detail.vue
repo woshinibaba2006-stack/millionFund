@@ -335,7 +335,8 @@ async function submitCostAdjust() {
     const costMarketValue = marketValue - profit
     const costNetValue = newShares > 0 ? costMarketValue / newShares : currentNetValue
     
-    const addedGain = ((currentNetValue - costNetValue) / currentNetValue) * 100
+    // 累计涨幅 = (当前净值 - 成本净值) / 成本净值 * 100%
+    const addedGain = ((currentNetValue - costNetValue) / costNetValue) * 100
 
     console.log('[调整成本] 计算结果:', {
       用户输入市值: marketValue,
@@ -1214,12 +1215,14 @@ function formatPercent(num: number): string {
           <van-field
             v-model="costFormData.amount"
             type="number"
+            inputmode="decimal"
             label="持仓金额"
             placeholder="调整后的持仓金额（元）"
           />
           <van-field
             v-model="costFormData.profit"
             type="number"
+            inputmode="decimal"
             label="持仓收益"
             placeholder="调整后的持仓收益（元）"
           />

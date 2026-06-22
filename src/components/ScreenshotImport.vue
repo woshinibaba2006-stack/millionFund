@@ -1,13 +1,13 @@
 <script setup lang="ts">
-// [WHY] 截图导入组件 - 通过 OCR 识别截图中的持仓信息
+// [WHY] 截图导入组件 - 通过 PaddleOCR 识别截图中的持仓信息
 // [WHAT] 支持拍照/选择图片，识别基金持仓并批量导入
-// [DEPS] 依赖 ocr.ts 进行文字识别
+// [DEPS] 依赖 ocr.ts (PaddleOCR) 进行文字识别
 
-import { ref, computed } from 'vue'
-import { showToast, showLoadingToast, closeToast } from 'vant'
-import { recognizeHoldings, type RecognizedHolding } from '@/utils/ocr'
+import { ref, computed, onMounted, watch } from 'vue'
+import { showToast, showLoadingToast, closeToast, showConfirmDialog } from 'vant'
+import { recognizeHoldings, recognizeText, recognizeTextLocal, parseHoldingTextOnline, parseHoldingTextLocal, type RecognizedHolding, setBaiduOcrConfig, getBaiduOcrConfig, setPreferredLocalOcr, getPreferredLocalOcr } from '@/utils/ocr'
 import { searchFund, fetchFundEstimate, fetchFundList } from '@/api/fund'
-import { fetchLatestNetValue } from '@/api/fundFast'
+import { fetchLatestNetValue, fetchFundAccurateData } from '@/api/fundFast'
 import { useHoldingStore } from '@/stores/holding'
 import type { HoldingRecord, FundInfo } from '@/types/fund'
 
@@ -22,13 +22,23 @@ const emit = defineEmits<{
 
 const holdingStore = useHoldingStore()
 
+// [WHAT] 百度 OCR 配置
+const apiKey = ref('')
+const secretKey = ref('')
+const hasConfig = ref(false)
+
 // [WHAT] 组件状态
-const step = ref<'upload' | 'recognizing' | 'preview' | 'importing'>('upload')
+const step = ref<'config' | 'upload' | 'recognizing' | 'preview' | 'importing'>('upload')
 const selectedImage = ref<string>('')
 const ocrProgress = ref(0)
 const ocrStatus = ref('')
-const recognizedHoldings = ref<RecognizedHolding[]>([])
-const selectedCodes = ref<Set<string>>(new Set())
+
+// [WHAT] 是否使用在线 OCR（默认关闭，默认为本地识别）
+const useOnlineOcr = ref(false)
+
+// DEBUG: 临时跳过远程净值/估值请求（用于调试网络超时问题），
+// 设为 `false` 以恢复远程请求
+const DEBUG_SKIP_REMOTE_ESTIMATE = true
 
 // [WHAT] 增强后的持仓信息（包含从 API 获取的名称和净值）
 interface EnhancedHolding extends RecognizedHolding {
@@ -38,6 +48,54 @@ interface EnhancedHolding extends RecognizedHolding {
   selected?: boolean
 }
 const enhancedHoldings = ref<EnhancedHolding[]>([])
+
+// [WHAT] 调试用：存储原始识别文本
+const rawOcrText = ref('')
+
+// [WHAT] 初始化时检查配置
+onMounted(() => {
+  // [DEV] 检查本地存储的配置
+  const config = getBaiduOcrConfig()
+  if (config && config.apiKey && config.secretKey) {
+    apiKey.value = config.apiKey
+    secretKey.value = config.secretKey
+    hasConfig.value = true
+    step.value = 'upload'
+  }
+
+  // 读取本地识别偏好
+  try {
+    const pref = getPreferredLocalOcr()
+    // if user preferred local engines, keep online off
+    useOnlineOcr.value = !(pref === 'tesseract' || pref === 'paddle')
+  } catch (err) {
+    useOnlineOcr.value = false
+  }
+})
+
+// [WHAT] 保存配置
+function saveConfig() {
+  if (!apiKey.value.trim() || !secretKey.value.trim()) {
+    showToast('请填写完整的 API Key 和 Secret Key')
+    return
+  }
+
+  setBaiduOcrConfig({
+    apiKey: apiKey.value.trim(),
+    secretKey: secretKey.value.trim()
+  })
+
+  hasConfig.value = true
+  step.value = 'upload'
+  showToast('配置保存成功')
+}
+
+// 监听开关并保存偏好（如果用户选择本地，则记为本地偏好）
+watch(useOnlineOcr, (v) => {
+  try {
+    setPreferredLocalOcr(v ? 'auto' : 'tesseract')
+  } catch (err) { /* ignore */ }
+})
 
 // [WHAT] 计算选中数量
 const selectedCount = computed(() => {
@@ -50,13 +108,11 @@ async function handleFileChange(event: Event) {
   const file = target.files?.[0]
   if (!file) return
   
-  // [WHAT] 验证文件类型
   if (!file.type.startsWith('image/')) {
     showToast('请选择图片文件')
     return
   }
   
-  // [WHAT] 转换为 Base64 预览
   const reader = new FileReader()
   reader.onload = async (e) => {
     selectedImage.value = e.target?.result as string
@@ -72,62 +128,128 @@ async function startRecognition(file: File) {
   ocrStatus.value = '准备识别...'
   
   try {
-    const holdings = await recognizeHoldings(file, (progress, status) => {
-      ocrProgress.value = Math.round(progress * 100)
-      ocrStatus.value = status
-    })
-    
-    recognizedHoldings.value = holdings
-
-    // 调试输出：打印识别结果与原始 OCR 数据，方便在控制台粘贴给开发者
-    try {
-      // 在 Web 环境 globalThis.__lastOcrData 存储了完整的 tesseract 返回结构
-      // 打印两次以确保能看到文本与 words 信息
-      console.log('OCR recognizedHoldings:', holdings)
-      console.log('__lastOcrData:', (globalThis as any).__lastOcrData)
-    } catch (e) {
-      // 忽略环境中无法访问 globalThis 情况
+    // 先获取原始文本用于调试
+    let text: string
+    if (!useOnlineOcr.value) {
+      text = await recognizeTextLocal(file, (progress, status) => {
+        ocrProgress.value = Math.round(progress * 50)
+        ocrStatus.value = status
+      })
+    } else {
+      // 使用在线识别前确保已配置 Key
+      const cfg = getBaiduOcrConfig()
+      if (!cfg || !cfg.apiKey || !cfg.secretKey) {
+        await showConfirmDialog({
+          title: '需要配置百度 OCR',
+          message: '在线识别需要先配置 API Key 和 Secret Key，请在设置页填写后重试',
+          confirmButtonText: '确定'
+        })
+        step.value = 'config'
+        return
+      }
+      text = await recognizeText(file, (progress, status) => {
+        ocrProgress.value = Math.round(progress * 50) // OCR 占用 50%
+        ocrStatus.value = status
+      })
     }
+    rawOcrText.value = text
+    console.log('【OCR原始文本】', text)
+
+    const holdings = !useOnlineOcr.value ? await parseHoldingTextLocal(text) : await parseHoldingTextOnline(text)
+    ocrProgress.value = 60
+    ocrStatus.value = '解析持仓信息...'
     
     if (holdings.length === 0) {
-      showToast('未识别到持仓信息，请确保截图清晰')
+      // 解析失败，输出调试信息
+      console.log('【解析失败】未能从上述文本中解析出持仓信息')
+      console.log('【调试提示】请检查控制台中的【OCR原始文本】，确认是否包含：')
+      console.log('  - 6位基金代码（如 006751）')
+      console.log('  - 持仓金额（如 74,870.07）')
+      console.log('  - 基金名称（如 浦银安盛全球智能科技A）')
+      
+      showToast('未识别到持仓信息，请查看控制台调试信息')
       step.value = 'upload'
       return
     }
     
-    // [WHAT] 增强持仓信息（获取基金名称和净值）
+    ocrProgress.value = 70
     await enhanceHoldings(holdings)
     step.value = 'preview'
     
-  } catch (error) {
+  } catch (error: any) {
     console.error('OCR识别失败:', error)
+    const msg = error?.message || String(error)
+    // 当未配置百度 Key/Secret 时，ocr.ts 会抛出 NO_BAIDU_CONFIG 错误
+    if (typeof msg === 'string' && msg.startsWith('NO_BAIDU_CONFIG')) {
+      // 提示用户：前往设置或切换为本地识别
+      try {
+        await showConfirmDialog({
+          title: '未配置百度 OCR',
+          message: '未检测到百度 OCR 的 API Key/Secret。请选择：\n- 前往设置并配置密钥（去设置）\n- 或切换为"使用本地识别"',
+          confirmButtonText: '使用本地识别',
+          cancelButtonText: '去设置'
+        })
+        // 用户选择使用本地识别 -> 切换并重试一次
+        useOnlineOcr.value = false
+        // 保存偏好
+        try { setPreferredLocalOcr('tesseract') } catch (_) {}
+        await startRecognition(file)
+      } catch (dialogErr) {
+        // 用户选择去设置（或关闭对话框），切换到配置步骤
+        step.value = 'config'
+      }
+      return
+    }
+
     showToast('识别失败，请重试')
     step.value = 'upload'
   }
 }
 
-// [WHAT] 增强持仓信息
+// [WHAT] 增强持仓信息（获取基金名称和净值）
 async function enhanceHoldings(holdings: RecognizedHolding[]) {
-  enhancedHoldings.value = holdings.map(h => ({
+  // 预合并：合并相同 code 或标准化名称的条目，避免 OCR 拆分导致重复（例如同一基金被识别为两行）
+  const mergedMap = new Map<string, RecognizedHolding>()
+  const normalizeKey = (h: RecognizedHolding) => {
+    if (h.code) return `c:${h.code}`
+    return `n:${(h.name || '').toLowerCase().replace(/\s+/g, '').replace(/[()（）]/g, '')}`
+  }
+
+  for (const h of holdings) {
+    if ((!h.code || h.code.trim() === '') && (!h.name || h.name.trim() === '')) continue
+    const key = normalizeKey(h)
+    const existing = mergedMap.get(key)
+    if (!existing) {
+      mergedMap.set(key, { ...h })
+    } else {
+      existing.amount = Math.max(existing.amount || 0, h.amount || 0)
+      existing.profit = (existing.profit || 0) + (h.profit || 0)
+      existing.confidence = Math.max(existing.confidence || 0, h.confidence || 0)
+      if (!existing.name && h.name) existing.name = h.name
+      if (!existing.code && h.code) existing.code = h.code
+      mergedMap.set(key, existing)
+    }
+  }
+
+  const merged = Array.from(mergedMap.values())
+
+  enhancedHoldings.value = merged.map(h => ({
     ...h,
     loading: true,
     selected: h.code && h.amount > 0 && !holdingStore.hasHolding(h.code)
   }))
   
-  // [WHAT] 并行获取基金信息
-  const promises = holdings.map(async (h, index) => {
-    // 如果既没有 code 也没有看起来像基金名的名称，则跳过匹配工作
-    if (!h.code && !isLikelyFundName(h.name)) {
+  const promises = merged.map(async (h, index) => {
+    if (!h.code && !h.name) {
       enhancedHoldings.value[index].loading = false
       return
     }
     
     try {
-      // [WHAT] 优先用代码搜索；若无代码则用名称搜索（适配支付宝截图没有代码的场景）
+      // 优先用代码搜索；若无代码则用名称搜索
       const query = (h.code && h.code.trim()) ? h.code : (h.name || '')
       if (query) {
         let results = await searchFund(query, 1)
-        // 如果单条命中失败，扩大搜索范围并使用相似度得分选取最可能的基金
         if ((!results || results.length === 0) && h.name) {
           const broader = await searchFund(h.name, 10)
           if (broader && broader.length > 0) {
@@ -142,10 +264,8 @@ async function enhanceHoldings(holdings: RecognizedHolding[]) {
           if (!h.name) {
             enhancedHoldings.value[index].name = results[0].name
           }
-          // 如果通过名称搜索找到结果且记录中没有 code，填充 code 以便后续获取净值
           if (!h.code && results[0].code) {
             enhancedHoldings.value[index].code = results[0].code
-            // 自动选中：当我们填充了 code 且不在已有持仓时，自动勾选以便用户直接导入
             if (!enhancedHoldings.value[index].selected && enhancedHoldings.value[index].amount > 0 && !holdingStore.hasHolding(results[0].code)) {
               enhancedHoldings.value[index].selected = true
             }
@@ -153,11 +273,10 @@ async function enhanceHoldings(holdings: RecognizedHolding[]) {
         }
       }
 
-      // 回退策略：如果仍无 code，且名称看起来像基金名，尝试使用本地全量基金列表做模糊匹配
-      if (!enhancedHoldings.value[index].code && h.name && isLikelyFundName(h.name)) {
+      // 回退：本地基金列表模糊匹配
+      if (!enhancedHoldings.value[index].code && h.name) {
         try {
           const fullList = await fetchFundList()
-          // 计算得分并选择最佳候选
           let best: any = null
           let bestScore = -1
           for (const f of fullList) {
@@ -168,22 +287,32 @@ async function enhanceHoldings(holdings: RecognizedHolding[]) {
             enhancedHoldings.value[index].code = best.code
             enhancedHoldings.value[index].fundInfo = best
             if (!enhancedHoldings.value[index].name) enhancedHoldings.value[index].name = best.name
-            // 自动选中回填的候选
             if (!enhancedHoldings.value[index].selected && enhancedHoldings.value[index].amount > 0 && !holdingStore.hasHolding(best.code)) {
               enhancedHoldings.value[index].selected = true
             }
           }
         } catch (err) {
-          // 忽略匹配失败
           console.warn('本地基金列表模糊匹配失败', err)
         }
       }
 
-      // [WHAT] 仅在有基金代码时获取当前净值
+      // 获取当前净值：为避免当前调试期间网络 JSONP 超时导致过多错误，
+      // 可通过 DEBUG_SKIP_REMOTE_ESTIMATE 临时跳过远程请求。
       if (enhancedHoldings.value[index].code) {
-        const estimate = await fetchFundEstimate(enhancedHoldings.value[index].code)
-        if (estimate) {
-          enhancedHoldings.value[index].netValue = parseFloat(estimate.dwjz) || parseFloat(estimate.gsz) || 1
+        if (!DEBUG_SKIP_REMOTE_ESTIMATE && !useLocalOcr.value) {
+          try {
+            const estimate = await fetchFundEstimate(enhancedHoldings.value[index].code)
+            if (estimate) {
+              enhancedHoldings.value[index].netValue = parseFloat(estimate.dwjz) || parseFloat(estimate.gsz) || 1
+            }
+          } catch (err) {
+            // 网络或 JSONP 超时时，保持默认 netValue（后续导入会使用默认或手动编辑）
+            console.warn(`获取基金 ${enhancedHoldings.value[index].code} 信息失败（已跳过）:`, err)
+            enhancedHoldings.value[index].netValue = enhancedHoldings.value[index].netValue || 1
+          }
+        } else {
+          // 临时跳过远程请求，使用默认值或本地可用的数据
+          enhancedHoldings.value[index].netValue = enhancedHoldings.value[index].netValue || 1
         }
       }
     } catch (error) {
@@ -194,6 +323,53 @@ async function enhanceHoldings(holdings: RecognizedHolding[]) {
   })
   
   await Promise.all(promises)
+}
+
+// ======== 名称相似度与最佳匹配选择器 ========
+function normalizeNameForMatch(s: string | undefined) {
+  if (!s) return ''
+  return s
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[\u0000-\u0020\u2000-\u200B\ufffc\ufffd]/g, '')
+    .replace(/[^\u4e00-\u9fa5a-z0-9]/g, '')
+    .replace(/(智选|混合|灵活|配置|主题|基金|指数|股票|债券|发起|发起式|a类|c类)/g, '')
+}
+
+function matchScore(a: string, b: string) {
+  a = normalizeNameForMatch(a)
+  b = normalizeNameForMatch(b)
+  if (!a || !b) return 0
+  if (a === b) return 100
+  if (a.includes(b) || b.includes(a)) return 90
+
+  const makeGrams = (str: string) => {
+    const grams: string[] = []
+    for (let i = 0; i < str.length - 1; i++) grams.push(str.slice(i, i + 2))
+    return grams
+  }
+
+  const ag = makeGrams(a)
+  const bg = makeGrams(b)
+  let common = 0
+  const seen = new Set<string>()
+  for (const g of ag) {
+    if (bg.includes(g) && !seen.has(g)) { common++; seen.add(g) }
+  }
+  return Math.min(80, common * 25)
+}
+
+function chooseBestMatch(candidates: any[], originalName: string) {
+  if (!candidates || candidates.length === 0) return null
+  let best = null
+  let bestScore = -1
+  for (const c of candidates) {
+    let score = matchScore(c.name || c.p_name || '', originalName)
+    const nameNorm = normalizeNameForMatch(c.name || '')
+    if (nameNorm && nameNorm.includes(normalizeNameForMatch(originalName))) score += 10
+    if (score > bestScore) { bestScore = score; best = c }
+  }
+  return bestScore >= 30 ? best : null
 }
 
 // [WHAT] 切换选中状态
@@ -216,10 +392,7 @@ function toggleSelectAll() {
     h => h.code && h.amount > 0 && !holdingStore.hasHolding(h.code)
   )
   const allSelected = validHoldings.every(h => h.selected)
-  
-  validHoldings.forEach(h => {
-    h.selected = !allSelected
-  })
+  validHoldings.forEach(h => { h.selected = !allSelected })
 }
 
 // [WHAT] 修改金额
@@ -228,6 +401,63 @@ function updateAmount(index: number, value: string) {
   if (!isNaN(amount) && amount >= 0) {
     enhancedHoldings.value[index].amount = amount
   }
+}
+
+// [WHAT] 修改盈亏
+function updateProfit(index: number, value: string) {
+  const profit = parseFloat(value)
+  if (!isNaN(profit)) {
+    enhancedHoldings.value[index].profit = profit
+  }
+}
+
+// [WHAT] 修改基金代码并重新获取基金信息
+async function updateCode(index: number, value: string) {
+  const newCode = value.trim()
+  const holding = enhancedHoldings.value[index]
+  if (!newCode || newCode === holding.code) return
+
+  holding.code = newCode
+  holding.loading = true
+  holding.fundInfo = undefined
+  holding.netValue = undefined
+
+  try {
+    const results = await searchFund(newCode, 1)
+    if (results && results.length > 0) {
+      holding.fundInfo = results[0]
+      holding.name = results[0].name
+      holding.code = results[0].code
+      // 重新获取净值
+      try {
+        const accurateData = await fetchFundAccurateData(holding.code, holding.fundInfo?.type?.includes('QDII'))
+        if (accurateData && (accurateData.nav || accurateData.currentValue)) {
+          holding.netValue = accurateData.nav || accurateData.currentValue || 1
+        } else {
+          holding.netValue = 1
+        }
+      } catch {
+        holding.netValue = 1
+      }
+      // 更新选中状态
+      holding.selected = holding.amount > 0 && !holdingStore.hasHolding(holding.code)
+    } else {
+      showToast('未找到该基金代码')
+      holding.netValue = 1
+    }
+  } catch (error) {
+    console.error('搜索基金失败:', error)
+    showToast('搜索基金失败')
+    holding.netValue = 1
+  } finally {
+    holding.loading = false
+  }
+}
+
+// 格式化显示的基金名称：去掉数字以避免 OCR 引入的序号或行号
+function formatFundName(name: string | undefined) {
+  if (!name) return '未知基金'
+  return String(name).replace(/\d+/g, '').replace(/\s+/g, ' ').trim()
 }
 
 // [WHAT] 确认导入
@@ -240,7 +470,7 @@ async function confirmImport() {
   }
   
   step.value = 'importing'
-  const loading = showLoadingToast({ message: '导入中...', forbidClick: true })
+  showLoadingToast({ message: '导入中...', forbidClick: true })
   
   try {
     let imported = 0
@@ -248,29 +478,54 @@ async function confirmImport() {
     
     for (const h of toImport) {
       try {
-        // [WHAT] 获取最新净值
         let netValue = h.netValue || 1
-        const latestNetValue = await fetchLatestNetValue(h.code)
         
-        if (latestNetValue && latestNetValue.netValue > 0) {
-          netValue = latestNetValue.netValue
-        } else if (!h.netValue) {
-          // [WHAT] 如果没有净值且获取失败，使用默认值1
-          netValue = 1
+        // [FIX] 使用 fetchFundAccurateData 获取最新净值
+        // 但不用于反推买入净值，而是直接使用截图中的盈亏
+        let currentNav = h.netValue || 1
+        try {
+          const accurateData = await fetchFundAccurateData(h.code, h.fundInfo?.type?.includes('QDII'))
+          if (accurateData && accurateData.currentValue > 0) {
+            currentNav = accurateData.currentValue
+            console.log('[截图导入-净值]', h.code, {
+              currentValue: accurateData.currentValue,
+              nav: accurateData.nav,
+              navDate: accurateData.navDate,
+              dataSource: accurateData.dataSource
+            })
+          }
+        } catch (error) {
+          console.error('获取净值失败，使用默认值:', error)
         }
         
-        // [WHAT] 计算持有份额
-        const shares = h.amount / netValue
+        // [DEBUG] 计算份额和买入净值
+        const shares = h.amount / currentNav
+        const buyNetValue = h.profit !== 0 && shares > 0 
+          ? (h.amount - h.profit) / shares  // 反推买入净值（仅供参考）
+          : currentNav
         
-        const buyDate = h.buyDate || new Date().toISOString().split('T')[0]
+        console.log(`========== [截图导入-计算过程] ${h.code} ==========`)
+        console.log(`持仓金额 (marketValue): ${h.amount}`)
+        console.log(`持仓收益 (profit): ${h.profit}`)
+        console.log(`最新净值 (currentNav): ${currentNav}`)
+        console.log(`--- 份额计算 ---`)
+        console.log(`  份额 (shares) = 持仓市值 / 最新净值 = ${h.amount} / ${currentNav} = ${shares}`)
+        console.log(`--- 买入净值计算 ---`)
+        console.log(`  成本 = 持仓市值 - 持仓收益 = ${h.amount} - ${h.profit} = ${h.amount - h.profit}`)
+        console.log(`  买入净值 (buyNetValue) = 成本 / 份额 = (${h.amount} - ${h.profit}) / ${shares} = ${buyNetValue}`)
+        console.log(`=============================================`)
+        
+        // [FIX] 不保留小数，使用原始精度，保证后续计算精准
         const record: HoldingRecord = {
           code: h.code,
           name: h.name || h.fundInfo?.name || h.code,
-          buyNetValue: netValue,
+          buyNetValue: buyNetValue,
           shares: shares,
-          buyDate: buyDate,
+          buyDate: new Date().toISOString().split('T')[0],
           holdingDays: 0,
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          // [FIX] 添加 profit 字段，存储截图中的原始盈亏
+          profit: h.profit
         }
         
         await holdingStore.addOrUpdateHolding(record)
@@ -298,93 +553,14 @@ async function confirmImport() {
   }
 }
 
-
-
-// ======== 名称相似度与最佳匹配选择器 ========
-function normalizeNameForMatch(s: string | undefined) {
-  if (!s) return ''
-  // 去掉 OCR 常见空格并移除标点、常见后缀噪声
-  return s
-    .toLowerCase()
-    .replace(/\s+/g, '')
-    .replace(/[\u0000-\u0020\u2000-\u200B\ufffc\ufffd]/g, '')
-    .replace(/[^\u4e00-\u9fa5a-z0-9]/g, '')
-    .replace(/(智选|混合|灵活|配置|主题|基金|指数|股票|债券|发起|发起式|发起A|发起C|a类|c类)/g, '')
-}
-
-function asciiNormalize(s: string | undefined) {
-  if (!s) return ''
-  return s.toLowerCase().replace(/[^a-z0-9]/g, '')
-}
-
-function matchScore(a: string, b: string) {
-  a = normalizeNameForMatch(a)
-  b = normalizeNameForMatch(b)
-  if (!a || !b) return 0
-  if (a === b) return 100
-  if (a.includes(b) || b.includes(a)) return 90
-
-  // Chinese bigram overlap scoring
-  const makeGrams = (str: string) => {
-    const grams: string[] = []
-    for (let i = 0; i < str.length - 1; i++) grams.push(str.slice(i, i + 2))
-    return grams
-  }
-
-  const ag = makeGrams(a)
-  const bg = makeGrams(b)
-  let common = 0
-  const seen = new Set<string>()
-  for (const g of ag) {
-    if (bg.includes(g) && !seen.has(g)) { common++; seen.add(g) }
-  }
-  const base = Math.min(80, common * 25)
-  return base
-}
-
-function chooseBestMatch(candidates: any[], originalName: string) {
-  if (!candidates || candidates.length === 0) return null
-  let best = null
-  let bestScore = -1
-  const origAscii = asciiNormalize(originalName)
-  for (const c of candidates) {
-    let score = matchScore(c.name || c.p_name || '', originalName)
-    // 利用 fullPinyin/pinyin 提高对 OCR 间隔与拼写错误的容错
-    const fp = (c.fullPinyin || c.pinyin || '').toLowerCase()
-    if (origAscii && fp && fp.includes(origAscii)) score += 30
-    // 如果候选名里包含原始短词，也进一步加分
-    const nameNorm = normalizeNameForMatch(c.name || '')
-    if (nameNorm && nameNorm.includes(normalizeNameForMatch(originalName))) score += 10
-
-    if (score > bestScore) { bestScore = score; best = c }
-  }
-  if (bestScore >= 30) return best
-  return null
-}
-
-// 简单判断一个识别到的字符串是否像基金名称（用于过滤噪声行）
-function isLikelyFundName(s: string | undefined) {
-  if (!s) return false
-  const cleaned = s.replace(/\s+/g, '')
-  // 含有明显的噪声词则认为不是基金名
-  const blacklist = ['市场解读', '解读', '名称', '净值', '持仓', '收益', '累积', '份额', '排名']
-  for (const b of blacklist) if (cleaned.includes(b)) return false
-  // 至少包含两个连续汉字且长度适中
-  const chineseMatch = cleaned.match(/[\u4e00-\u9fa5]{2,}/g)
-  if (chineseMatch && cleaned.length >= 4 && cleaned.length <= 40) return true
-  return false
-}
-
 // [WHAT] 关闭弹窗
 function closeDialog() {
   emit('update:show', false)
-  // [WHAT] 重置状态
   setTimeout(() => {
     step.value = 'upload'
     selectedImage.value = ''
     ocrProgress.value = 0
     ocrStatus.value = ''
-    recognizedHoldings.value = []
     enhancedHoldings.value = []
   }, 300)
 }
@@ -393,13 +569,6 @@ function closeDialog() {
 function reselectImage() {
   step.value = 'upload'
   selectedImage.value = ''
-}
-
-// [WHAT] 获取置信度颜色
-function getConfidenceColor(confidence: number): string {
-  if (confidence >= 0.8) return '#67c23a'
-  if (confidence >= 0.5) return '#e6a23c'
-  return '#f56c6c'
 }
 
 // [WHAT] 格式化金额
@@ -423,20 +592,56 @@ function formatAmount(amount: number): string {
         <van-icon name="cross" @click="closeDialog" />
       </div>
 
+      <!-- 配置步骤 -->
+      <div v-if="step === 'config'" class="config-step">
+        <div class="config-tip">
+          <van-icon name="info-o" size="48" color="var(--color-primary)" />
+          <p class="tip-title">配置百度 OCR</p>
+          <p class="tip-desc">使用百度智能云 OCR API 进行文字识别</p>
+          <p class="tip-desc">每天有 500 次免费额度</p>
+        </div>
+        
+        <div class="config-form">
+          <van-field
+            v-model="apiKey"
+            label="API Key"
+            placeholder="请输入百度云 API Key"
+            :rules="[{ required: true, message: '请填写 API Key' }]"
+          />
+          <van-field
+            v-model="secretKey"
+            label="Secret Key"
+            placeholder="请输入百度云 Secret Key"
+            :rules="[{ required: true, message: '请填写 Secret Key' }]"
+          />
+          
+          <div class="config-help">
+            <p class="help-title">如何获取密钥？</p>
+            <ol>
+              <li>登录 <a href="https://console.bce.baidu.com/ai/#/ai/ocr/overview/index" target="_blank">百度智能云</a></li>
+              <li>创建 OCR 应用</li>
+              <li>获取 API Key 和 Secret Key</li>
+            </ol>
+          </div>
+          
+          <van-button type="primary" block @click="saveConfig">保存配置</van-button>
+        </div>
+      </div>
+
       <!-- 上传步骤 -->
       <div v-if="step === 'upload'" class="upload-step">
         <div class="upload-tip">
           <van-icon name="photo-o" size="48" color="var(--color-primary)" />
           <p class="tip-title">选择持仓截图</p>
-          <p class="tip-desc">支持支付宝、天天基金、蛋卷基金等平台的持仓截图</p>
+          <p class="tip-desc">支持支付宝、京东、腾讯理财通持仓截图</p>
+          <p class="tip-desc">使用 PaddleOCR 本地识别，无需联网</p>
+        </div>
+        <div class="local-ocr-toggle" style="display:flex;align-items:center;gap:12px;margin:12px 16px;">
+          <span style="flex:1">使用在线识别（需要配置百度 API Key）</span>
+          <van-switch v-model="useOnlineOcr" size="24" />
         </div>
         
         <div class="upload-actions">
-          <label class="upload-btn">
-            <van-icon name="photograph" />
-            <span>拍照</span>
-            <input type="file" accept="image/*" capture="environment" @change="handleFileChange" />
-          </label>
           <label class="upload-btn">
             <van-icon name="photo" />
             <span>相册</span>
@@ -447,9 +652,9 @@ function formatAmount(amount: number): string {
         <div class="usage-tips">
           <p class="tips-title">使用提示</p>
           <ul>
-            <li>请确保截图清晰，包含基金代码和金额</li>
-            <li>支持一次导入多只基金</li>
-            <li>识别后可手动修改金额</li>
+            <li>请确保截图清晰，包含基金名称和金额</li>
+            <li>首次使用需加载 OCR 模型（约5MB）</li>
+            <li>识别后可手动修改基金代码、金额和盈亏</li>
           </ul>
         </div>
       </div>
@@ -492,26 +697,41 @@ function formatAmount(amount: number): string {
             </div>
             <div class="item-content">
               <div class="item-name">
-                <span class="fund-name">{{ holding.name || holding.fundInfo?.name || '未知基金' }}</span>
-                <span v-if="holding.code" class="fund-code">{{ holding.code }}</span>
+                <span class="fund-name">{{ formatFundName(holding.name || holding.fundInfo?.name || '未知基金') }}</span>
+                <input 
+                  :value="holding.code"
+                  class="code-input"
+                  placeholder="输入代码"
+                  @click.stop
+                  @change="updateCode(index, $event.target.value)"
+                />
                 <van-loading v-if="holding.loading" size="12" />
               </div>
               <div class="item-info">
                 <span v-if="holdingStore.hasHolding(holding.code)" class="tag-exists">已持有</span>
-                <span v-else class="confidence" :style="{ color: getConfidenceColor(holding.confidence) }">
-                  置信度 {{ Math.round(holding.confidence * 100) }}%
-                </span>
               </div>
             </div>
-            <div class="item-amount">
-              <input 
-                type="number" 
-                :value="holding.amount"
-                class="amount-input"
-                @click.stop
-                @input="updateAmount(index, ($event.target as HTMLInputElement).value)"
-              />
-              <span class="amount-unit">元</span>
+            <div class="item-amounts">
+              <div class="amount-row">
+                <span class="amount-label">市值</span>
+                <input 
+                  type="number" 
+                  :value="holding.amount"
+                  class="amount-input"
+                  @click.stop
+                  @input="updateAmount(index, $event.target.value)"
+                />
+              </div>
+              <div class="amount-row">
+                <span class="amount-label">盈亏</span>
+                <input 
+                  type="number" 
+                  :value="holding.profit"
+                  class="amount-input profit-input"
+                  @click.stop
+                  @input="updateProfit(index, $event.target.value)"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -551,6 +771,52 @@ function formatAmount(amount: number): string {
   border-bottom: 1px solid var(--border-color);
 }
 
+/* 配置步骤 */
+.config-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 16px;
+}
+
+.config-tip {
+  text-align: center;
+  padding: 32px 0;
+}
+
+.config-form {
+  padding: 16px;
+}
+
+.config-help {
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+}
+
+.help-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.config-help ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.config-help li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.config-help a {
+  color: var(--color-primary);
+}
+
 /* 上传步骤 */
 .upload-step {
   flex: 1;
@@ -574,6 +840,7 @@ function formatAmount(amount: number): string {
 .tip-desc {
   font-size: 14px;
   color: var(--text-secondary);
+  margin: 4px 0;
 }
 
 .upload-actions {
@@ -675,7 +942,6 @@ function formatAmount(amount: number): string {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .preview-header {
@@ -699,21 +965,20 @@ function formatAmount(amount: number): string {
   align-items: center;
   gap: 12px;
   padding: 12px;
+  margin-bottom: 8px;
   background: var(--bg-primary);
   border-radius: 8px;
-  margin-bottom: 8px;
+  border: 2px solid transparent;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .holding-item.selected {
-  background: var(--color-primary-bg);
-  border: 1px solid var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 .holding-item.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .item-checkbox {
@@ -728,7 +993,7 @@ function formatAmount(amount: number): string {
 .item-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .fund-name {
@@ -746,54 +1011,75 @@ function formatAmount(amount: number): string {
   flex-shrink: 0;
 }
 
+.code-input {
+  width: 70px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px 6px;
+  background: var(--bg-primary);
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.code-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
 .item-info {
   margin-top: 4px;
 }
 
-.confidence {
-  font-size: 12px;
-}
-
 .tag-exists {
-  font-size: 11px;
-  padding: 2px 6px;
-  background: var(--color-warning-bg, #fffbe6);
-  color: var(--color-warning, #faad14);
+  font-size: 12px;
+  color: var(--color-primary);
+  background: var(--color-primary-bg);
+  padding: 1px 6px;
   border-radius: 4px;
 }
 
-.item-amount {
+.item-amounts {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.amount-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  flex-shrink: 0;
+}
+
+.amount-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  width: 28px;
 }
 
 .amount-input {
-  width: 80px;
-  padding: 6px 8px;
+  width: 140px;
+  padding: 2px 6px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
+  font-size: 13px;
+  text-align: right;
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 14px;
-  text-align: right;
 }
 
-.amount-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-}
-
-.amount-unit {
-  font-size: 12px;
-  color: var(--text-secondary);
+.profit-input {
+  width: 140px;
+  color: var(--color-up);
 }
 
 .preview-footer {
   display: flex;
   gap: 12px;
-  padding: 16px;
+  padding: 12px 16px;
   border-top: 1px solid var(--border-color);
 }
 
@@ -809,6 +1095,10 @@ function formatAmount(amount: number): string {
   align-items: center;
   justify-content: center;
   gap: 16px;
+}
+
+.importing-step p {
+  font-size: 14px;
   color: var(--text-secondary);
 }
 </style>

@@ -110,7 +110,7 @@
                   <div class="fund-left">
                     <span class="fund-code">{{ record.sellCode }}</span>
                     <span class="fund-day-change" :class="getDayChangeClass(record, 'sell')">
-                      {{ getDayChangeText(record, 'sell') }}
+                      <span class="fund-day-change-label">今日：</span>{{ getDayChangeText(record, 'sell') }}
                     </span>
                   </div>
                   <div class="fund-change-right" :class="getChangeClass(record, 'sell')">
@@ -127,7 +127,7 @@
                   <div class="fund-left">
                     <span class="fund-code">{{ record.buyCode }}</span>
                     <span class="fund-day-change" :class="getDayChangeClass(record, 'buy')">
-                      {{ getDayChangeText(record, 'buy') }}
+                      <span class="fund-day-change-label">今日：</span>{{ getDayChangeText(record, 'buy') }}
                     </span>
                   </div>
                   <div class="fund-change-right" :class="getChangeClass(record, 'buy')">
@@ -1345,6 +1345,19 @@ onUnmounted(() => {
   &.down {
     color: var(--color-down);
     background: rgba(7, 193, 96, 0.1);
+  }
+}
+
+.fund-day-change-label {
+  font-size: 10px;
+  color: inherit;
+  margin-right: 2px;
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .fund-day-change-label {
+    display: inline;
   }
 }
 

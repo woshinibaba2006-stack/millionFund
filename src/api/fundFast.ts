@@ -5,6 +5,7 @@
 import { cache, CACHE_TTL } from './cache'
 import { isTradingTime, persistCache } from './tiantianApi'
 import type { FundEstimate, NetValueRecord } from '@/types/fund'
+import { getPrevWorkdaySync, isHolidaySync, clearHolidayCache } from '../utils/holiday'
 
 // [WHAT] 清除指定基金的缓存数据
 export function clearFundCache(code: string): void {
@@ -786,12 +787,16 @@ export async function fetchFundAccurateData(code: string, isQDII: boolean = fals
   const currentMinute = now.getMinutes()
 
   // [WHAT] 判断是否在交易时间
-  const isWeekday = now.getDay() >= 1 && now.getDay() <= 5
+  const dayOfWeek = now.getDay()
+  // [WHAT] 判断是否是交易日：周一到周五且不是节假日
+  const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5 && !isHolidaySync(today)
   const isTradingHours = (currentHour === 9 && currentMinute >= 30) ||
     (currentHour > 9 && currentHour < 11) ||
     (currentHour === 11 && currentMinute <= 30) ||
     (currentHour >= 13 && currentHour < 15)
   const inTradingTime = isWeekday && isTradingHours
+
+  // console.log(`[交易时间判断] ${code}: dayOfWeek=${dayOfWeek}, isWeekday=${isWeekday}, currentHour=${currentHour}, currentMinute=${currentMinute}, isTradingHours=${isTradingHours}, inTradingTime=${inTradingTime}`)
 
   // [WHAT] 从历史净值中提取最新净值（第一个点是最新的）
   const historyData = historyResult.records || []
@@ -819,13 +824,7 @@ export async function fetchFundAccurateData(code: string, isQDII: boolean = fals
   }
 
   // [WHAT] 智能选择最准确的数据
-  // 场景1: 收盘后且有今日净值 -> 使用公布净值
-  // 场景2: 交易时间内 -> 使用估值
-  // 场景3: 非交易时间且无今日净值 -> 使用最新公布净值
-  // 场景4: QDII基金特殊处理 -> 非交易时间使用前一日净值，交易时间使用估值
-
-  const isNavFromToday = navData?.date === today
-  const isEstimateFromToday = estimateData?.gztime?.startsWith(today.replace(/-/g, '-'))
+  // 统一使用历史净值，确保导入和刷新使用相同的数据源和日期
 
   // console.log('日期判断:', {
   //   code,
@@ -838,79 +837,62 @@ export async function fetchFundAccurateData(code: string, isQDII: boolean = fals
   //   estimateChange: result.estimateChange
   // })
 
-  // [WHAT] QDII 基金特殊处理
-  if (isQDII) {
-    // [WHAT] 判断净值日期是否是昨天或今天
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
-    const isNavFromYesterday = navData?.date === yesterday
-    const isNavFromToday = navData?.date === today
+  // [WHAT] 判断净值日期是否是今日
+  const isNavFromToday = navData?.date === today
 
-    // [WHAT] QDII基金逻辑：昨日净值 > 今日净值 > 今日估值 > 昨日估值
-    // [WHY] 净值比估值准确，昨日的净值比今日的估值更有参考价值
-    if (isNavFromYesterday && result.nav > 0) {
-      // [WHAT] 昨日净值已公布（最常用场景），优先使用
-      result.currentValue = result.nav
-      result.dayChange = result.navChange
-      result.dataSource = 'nav'
-    } else if (isNavFromToday && result.nav > 0) {
-      // [WHAT] 今日净值已公布（特殊情况），使用今日净值
-      result.currentValue = result.nav
-      result.dayChange = result.navChange
-      result.dataSource = 'nav'
-    } else if (result.estimate > 0 && isEstimateFromToday) {
-      // [WHAT] 没有昨日/今日净值，使用今日估值
-      result.currentValue = result.estimate
-      result.dayChange = result.estimateChange
-      result.dataSource = 'estimate'
-    } else if (result.estimate > 0) {
-      // [WHAT] 没有今日估值，使用最近的估值（可能是昨天的）
-      result.currentValue = result.estimate
-      result.dayChange = result.estimateChange
-      result.dataSource = 'estimate'
-    } else {
-      // [EDGE] 没有任何数据，使用接口返回的昨日净值
-      const dwjz = parseFloat(estimateData?.dwjz || '0')
-      if (dwjz > 0) {
-        result.currentValue = dwjz
-        result.dayChange = 0
-        result.dataSource = 'fallback'
-      }
-    }
+  // [WHAT] 判断估值是否是今日
+  const estimateDate = result.estimateTime?.split(' ')[0]
+  const isEstimateFromToday = estimateDate === today
+
+  // [WHAT] 判断净值是否已更新（与holding.ts中的isUpdated逻辑一致）
+  // [WHY] QDII基金由于时差问题，净值更新会晚一天，需要判断前一个工作日的净值
+  const hasTodayNav = result.nav > 0 && result.navDate === today
+
+  // [WHAT] 计算前一个工作日（用于QDII基金判断）
+  // [WHY] 使用节假日API判断，如果是节假日则继续往前推
+  const prevWorkday = getPrevWorkdaySync(today)
+
+  const hasPrevWorkdayNavForQDII = isQDII && result.nav > 0 && result.navDate === prevWorkday
+  const isNavUpdated = hasTodayNav || hasPrevWorkdayNavForQDII
+
+  // console.log(`[数据源判断] ${code}: isWeekday=${isWeekday}, isNavUpdated=${isNavUpdated}, navDate=${result.navDate}, today=${today}, hasTodayNav=${hasTodayNav}, hasYesterdayNavForQDII=${hasYesterdayNavForQDII}, isQDII=${isQDII}`)
+  // console.log(`[数据源判断] ${code}: estimate=${result.estimate}, estimateChange=${result.estimateChange}, estimateTime=${result.estimateTime}, isEstimateFromToday=${isEstimateFromToday}`)
+
+  // [FIX] 根据是否是交易日和净值是否已更新来决定使用估值还是净值
+  // [WHY] 交易日：净值已更新用净值，净值未更新用估值
+  //       非交易日：使用最新净值
+  if (isWeekday && isNavUpdated) {
+    // [WHAT] 交易日 + 净值已更新，使用净值
+    result.currentValue = result.nav
+    result.dayChange = result.navChange
+    result.dataSource = 'nav'
+    console.log(`[currentValue选择] ${code}: 交易日+净值已更新 → 使用净值 nav=${result.nav}`)
+  } else if (isWeekday && result.estimate > 0) {
+    // [WHAT] 交易日 + 净值未更新，使用估值
+    result.currentValue = result.estimate
+    result.dayChange = result.estimateChange
+    result.dataSource = 'estimate'
+    console.log(`[currentValue选择] ${code}: 交易日+净值未更新 → 使用估值 estimate=${result.estimate}`)
+  } else if (result.nav > 0) {
+    // [WHAT] 非交易日，使用最新净值
+    result.currentValue = result.nav
+    result.dayChange = result.navChange
+    result.dataSource = 'nav'
+    console.log(`[currentValue选择] ${code}: 非交易日 → 使用净值 nav=${result.nav}`)
+  } else if (result.estimate > 0) {
+    // [EDGE] 无净值但有估值，使用估值
+    result.currentValue = result.estimate
+    result.dayChange = result.estimateChange
+    result.dataSource = 'estimate'
+    console.log(`[currentValue选择] ${code}: 无净值 → 使用估值 estimate=${result.estimate}`)
   } else {
-    // [WHAT] 非QDII基金正常处理
-    if (isNavFromToday && result.nav > 0) {
-      // [WHAT] 今日净值已公布（收盘后），最准确
-      result.currentValue = result.nav
-      result.dayChange = result.navChange
-      result.dataSource = 'nav'
-    } else if (inTradingTime && result.estimate > 0) {
-      // [WHAT] 交易时间内，使用估值
-      result.currentValue = result.estimate
-      result.dayChange = result.estimateChange
-      result.dataSource = 'estimate'
-    } else if (result.estimate > 0 && isEstimateFromToday) {
-      // [WHAT] 非交易时间但有今日估值（午休或收盘后净值未公布）
-      result.currentValue = result.estimate
-      result.dayChange = result.estimateChange
-      result.dataSource = 'estimate'
-    } else if (result.nav > 0) {
-      // [WHAT] 使用最新公布净值（可能是昨天的）
-      result.currentValue = result.nav
-      result.dayChange = result.navChange
-      result.dataSource = 'nav'
-    } else if (result.estimate > 0) {
-      // [WHAT] 只有估值可用
-      result.currentValue = result.estimate
-      result.dayChange = result.estimateChange
-      result.dataSource = 'estimate'
-    } else {
-      // [EDGE] 无数据可用，使用昨日净值
-      const dwjz = parseFloat(estimateData?.dwjz || '0')
-      if (dwjz > 0) {
-        result.currentValue = dwjz
-        result.dayChange = 0
-        result.dataSource = 'fallback'
-      }
+    // [EDGE] 无数据可用，使用昨日净值
+    const dwjz = parseFloat(estimateData?.dwjz || '0')
+    if (dwjz > 0) {
+      result.currentValue = dwjz
+      result.dayChange = 0
+      result.dataSource = 'fallback'
+      // console.log(`[currentValue选择] ${code}: 无数据 → 使用备用 dwjz=${dwjz}`)
     }
   }
 

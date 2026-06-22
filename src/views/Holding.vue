@@ -9,10 +9,11 @@ import { useHoldingStore } from '@/stores/holding'
 import { useAITrackingStore } from '@/stores/aiTracking'
 import { useThemeStore } from '@/stores/theme'
 import { searchFund, fetchFundEstimate } from '@/api/fund'
-import { fetchLatestNetValue } from '@/api/fundFast'
+import { fetchFundAccurateData } from '@/api/fundFast'
 import { showConfirmDialog, showToast, showLoadingToast, closeToast } from 'vant'
 import { formatMoney, formatPercent, getChangeStatus } from '@/utils/format'
 import { saveHoldings, saveSourceFilter, getSourceFilter } from '@/utils/storage'
+import { getBaiduOcrConfig, setBaiduOcrConfig } from '@/utils/ocr'
 import { isWeb, isMobile } from '@/utils/platform'
 import type { FundInfo, HoldingRecord } from '@/types/fund'
 import ScreenshotImport from '@/components/ScreenshotImport.vue'
@@ -384,7 +385,7 @@ function goToDetail(code: string) {
 }
 
 // [WHAT] 截图导入完成回调
-function onImported(count: number) {
+function onImported(_count: number) {
   // [WHAT] 导入完成后刷新持仓列表
   holdingStore.refreshEstimates()
 }
@@ -434,7 +435,8 @@ async function backupHoldings() {
     exportDate: new Date().toISOString(),
     holdings: holdingsForBackup,
     summary: holdingStore.summary,
-    aiTracking: aiTrackingForBackup
+    aiTracking: aiTrackingForBackup,
+    baiduOcrConfig: getBaiduOcrConfig()
   }
   
   // 转换为 JSON 字符串
@@ -526,6 +528,11 @@ function restoreHoldings() {
             aiTrackingStore.importRecords(jsonData.aiTracking)
           }
           
+          // 恢复百度 OCR 配置
+          if (jsonData.baiduOcrConfig && jsonData.baiduOcrConfig.apiKey && jsonData.baiduOcrConfig.secretKey) {
+            setBaiduOcrConfig(jsonData.baiduOcrConfig)
+          }
+          
           showToast('恢复成功')
         } catch (error) {
           showToast('解析备份文件失败')
@@ -542,6 +549,26 @@ function restoreHoldings() {
   
   // 触发文件选择对话框
   fileInput.click()
+}
+
+// [WHAT] 清空所有持仓数据
+async function clearAllHoldings() {
+  try {
+    await showConfirmDialog({
+      title: '确认清空',
+      message: '确定要清空所有持仓数据吗？此操作不可恢复！',
+    })
+    
+    // 清空 localStorage
+    localStorage.removeItem('fund_holdings')
+    
+    // 清空 store
+    holdingStore.holdings = []
+    
+    showToast('已清空所有持仓数据')
+  } catch {
+    // 用户取消
+  }
 }
 
 // ========== 批量录入相关函数 ==========
@@ -629,27 +656,53 @@ async function batchImport() {
         console.log('找到基金:', fund.name)
         
         let netValue = 1
+        let navDate = ''
         try {
-          const latestNetValue = await fetchLatestNetValue(fund.code)
-          if (latestNetValue && latestNetValue.netValue > 0) {
-            netValue = latestNetValue.netValue
+          // [FIX] 使用 fetchFundAccurateData 获取净值，与刷新时保持一致
+          // 避免估值和净值日期不一致导致计算错误
+          const accurateData = await fetchFundAccurateData(fund.code, item.isQDII)
+          if (accurateData && accurateData.currentValue > 0) {
+            netValue = accurateData.currentValue
+            navDate = accurateData.navDate
+            console.log(`[批量导入-净值] ${fund.code}: ${netValue} (日期: ${navDate}, 来源: ${accurateData.dataSource})`)
           }
         } catch (error) {
           console.error('获取净值失败，使用默认值:', error)
         }
         
-        const marketValue = parseFloat(item.amount)
-        const profit = parseFloat(item.profit) || 0
+        const marketValue = parseFloat(item.amount)  // 截图中的持仓市值
+        const profit = parseFloat(item.profit) || 0   // 截图中的盈亏
         
+        // 计算份额和买入净值
         const shares = marketValue / netValue
         
+        // [FIX] 买入净值计算：(持仓市值 - 盈亏) / 份额
+        // 盈亏是持仓市值相对于成本的变化，所以成本 = 持仓市值 - 盈亏
+        // 买入净值 = 成本 / 份额
         let buyNetValue = netValue
         if (profit !== 0 && shares > 0) {
           buyNetValue = (marketValue - profit) / shares
         }
         
+        // [DEBUG] 详细打印计算过程
+        console.log(`========== [批量导入-计算过程] ${fund.code} ==========`)
+        console.log(`持仓金额 (marketValue): ${marketValue}`)
+        console.log(`持仓收益 (profit): ${profit}`)
+        console.log(`最新净值 (netValue): ${netValue} (日期: ${navDate})`)
+        console.log(`--- 份额计算 ---`)
+        console.log(`  份额 (shares) = 持仓市值 / 最新净值 = ${marketValue} / ${netValue} = ${shares}`)
+        console.log(`--- 买入净值计算 ---`)
+        console.log(`  成本 = 持仓市值 - 持仓收益 = ${marketValue} - ${profit} = ${marketValue - profit}`)
+        console.log(`  买入净值 (buyNetValue) = 成本 / 份额 = (${marketValue} - ${profit}) / ${shares} = ${buyNetValue}`)
+        console.log(`=============================================`)
+        
+        // [NOTE] 导入时不计算当前收益，保持买入净值不变
+        // 当前收益会在持仓列表中根据最新净值自动计算
+        // 持有收益 = (当前净值 - 买入净值) × 份额
+        
         const industrySectors = item.sectors?.trim() || undefined
         
+        // [FIX] 不保留小数，使用原始精度，保证后续计算精准
         const record: HoldingRecord = {
           code: fund.code,
           name: fund.name,
@@ -665,8 +718,7 @@ async function batchImport() {
         
         console.log('构建记录:', record)
         await holdingStore.addOrUpdateHolding(record)
-        console.log('[批量导入] 最新净值:', netValue, '持有份额:', shares)
-        console.log('添加成功:', fund.code)
+        console.log('[批量导入] 添加成功:', fund.code, '净值:', netValue, '份额:', shares.toFixed(4))
         results.push(fund.code)
       } catch (error) {
         batchItems.value[index].error = '导入失败'
@@ -754,8 +806,10 @@ async function refreshHoldings() {
             @click="handleSort('down')"
             alt="降序" 
           />
+          <van-button size="small" @click="showImportDialog = true" class="mobile-hide">截图</van-button>
           <van-button size="small" @click="openBatchDialog">批量</van-button>
           <van-button size="small" @click="restoreHoldings">恢复</van-button>
+          <van-button size="small" @click="clearAllHoldings" type="danger" class="mobile-hide">清空</van-button>
         </div>
       </div>
       <!-- 网页端按钮行 -->
@@ -774,9 +828,11 @@ async function refreshHoldings() {
           >深</span>
         </div>
         <van-icon name="replay" size="20" @click="refreshHoldings" class="refresh-icon" />
+        <van-button size="small" @click="showImportDialog = true" class="nav-btn">截图</van-button>
         <van-button size="small" @click="openBatchDialog" class="nav-btn">批量</van-button>
         <van-button size="small" @click="backupHoldings" class="nav-btn">备份</van-button>
         <van-button size="small" @click="restoreHoldings" class="nav-btn">恢复</van-button>
+        <van-button size="small" @click="clearAllHoldings" class="nav-btn" type="danger">清空</van-button>
       </div>
     </div>
 
@@ -990,6 +1046,7 @@ async function refreshHoldings() {
           <van-field
             v-model="formData.amount"
             type="number"
+            inputmode="decimal"
             label="持仓金额"
             placeholder="请输入持仓金额（元）"
           />
@@ -1038,6 +1095,7 @@ async function refreshHoldings() {
           <van-field
             v-model="costFormData.amount"
             type="number"
+            inputmode="decimal"
             label="持仓市值"
             placeholder="请输入调整后的持仓市值（元）"
           />
@@ -1065,8 +1123,6 @@ async function refreshHoldings() {
       v-model:show="showImportDialog"
       @imported="onImported"
     />
-
-    <!-- 批量录入弹窗 -->
     <van-popup
       v-model:show="showBatchDialog"
       position="bottom"
@@ -1113,6 +1169,7 @@ async function refreshHoldings() {
                 <van-field
                   v-model="item.amount"
                   type="number"
+                  inputmode="decimal"
                   label="持仓金额"
                   placeholder="请输入持仓金额（元）"
                   :disabled="item.loading"
@@ -1121,6 +1178,7 @@ async function refreshHoldings() {
                 <van-field
                   v-model="item.profit"
                   type="number"
+                  inputmode="decimal"
                   label="持有收益"
                   placeholder="请输入持有收益（元），可留空"
                   :disabled="item.loading"
@@ -1425,6 +1483,11 @@ async function refreshHoldings() {
     gap: 8px;
   }
   
+  /* 移动端隐藏清空按钮 */
+  .mobile-hide {
+    display: none !important;
+  }
+  
   .mobile-actions .van-icon {
     font-size: 18px;
   }
@@ -1504,16 +1567,18 @@ async function refreshHoldings() {
   }
   
   .sort-web-icon {
-    width: 36px !important;
-    height: 36px !important;
-    max-width: 36px !important;
-    max-height: 36px !important;
+    width: 28px !important;
+    height: 28px !important;
+    max-width: 28px !important;
+    max-height: 28px !important;
     cursor: pointer;
     opacity: 0.6;
     transition: all 0.2s ease;
     border-radius: 4px;
     object-fit: contain;
     flex-shrink: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
   }
   
   .sort-web-icon:hover {
