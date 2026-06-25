@@ -116,6 +116,8 @@ const buyChange = ref(0)   // 今日估值涨幅
 const date = ref('')
 const sellName = ref('')
 const buyName = ref('')
+const sellNavEstimated = ref(false)  // 卖出净值是否是估值
+const buyNavEstimated = ref(false)   // 买入净值是否是估值
 const loading = ref(true)
 
 onMounted(() => {
@@ -130,6 +132,8 @@ onMounted(() => {
   sellChange.value = parseFloat(route.params.sellChange as string)
   buyChange.value = parseFloat(route.params.buyChange as string)
   date.value = route.params.date as string
+  sellNavEstimated.value = route.params.sellNavEstimated === '1'
+  buyNavEstimated.value = route.params.buyNavEstimated === '1'
   loading.value = false
 })
 
@@ -235,8 +239,11 @@ function getCalcProcessCombined(): string {
   const sellChange = ((sellPrice.value - sellNav.value) / sellNav.value) * 100
   const buyChange = ((buyPrice.value - buyNav.value) / buyNav.value) * 100
   
-  const sellStr = `卖出: ${sellPrice.value.toFixed(4)} - <span style="color:#1989fa">${sellNav.value.toFixed(4)}</span> = ${sellChange >= 0 ? '+' : ''}${sellChange.toFixed(2)}%`
-  const buyStr = `买入: ${buyPrice.value.toFixed(4)} - <span style="color:#1989fa">${buyNav.value.toFixed(4)}</span> = ${buyChange >= 0 ? '+' : ''}${buyChange.toFixed(2)}%`
+  const sellNavTag = sellNavEstimated.value ? ' <span style="color:#ff976a">(估值)</span>' : ''
+  const buyNavTag = buyNavEstimated.value ? ' <span style="color:#ff976a">(估值)</span>' : ''
+  
+  const sellStr = `卖出: ${sellPrice.value.toFixed(4)} - <span style="color:#1989fa">${sellNav.value.toFixed(4)}</span>${sellNavTag} = ${sellChange >= 0 ? '+' : ''}${sellChange.toFixed(2)}%`
+  const buyStr = `买入: ${buyPrice.value.toFixed(4)} - <span style="color:#1989fa">${buyNav.value.toFixed(4)}</span>${buyNavTag} = ${buyChange >= 0 ? '+' : ''}${buyChange.toFixed(2)}%`
   
   return `<div class="calc-sell">${sellStr}</div><div class="calc-buy">${buyStr}</div>`
 }

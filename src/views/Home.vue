@@ -382,13 +382,51 @@ const normalHoldings = computed(() => {
   if (currentSourceFilter.value) {
     funds = funds.filter(fund => fund.source === currentSourceFilter.value)
   }
-  return sortFunds(funds)
+  
+  // 计算总市值（用于占比计算）
+  const totalValue = funds.reduce((total, fund) => {
+    const currentValue = fund.currentValue || 0
+    const shares = fund.shares || 0
+    return total + (currentValue * shares)
+  }, 0)
+  
+  // 为每个基金添加占比
+  return sortFunds(funds).map(fund => {
+    const currentValue = fund.currentValue || 0
+    const shares = fund.shares || 0
+    const marketValue = currentValue * shares
+    const ratio = totalValue > 0 ? (marketValue / totalValue) * 100 : 0
+    
+    return {
+      ...fund,
+      ratio: ratio
+    }
+  })
 })
 
 // [WHAT] 观察账户基金，始终显示，不受来源筛选影响
 const observeHoldings = computed(() => {
   const funds = holdingStore.holdings.filter(fund => fund.source === 'observe')
-  return sortFunds(funds)
+  
+  // 计算总市值（用于占比计算）
+  const totalValue = funds.reduce((total, fund) => {
+    const currentValue = fund.currentValue || 0
+    const shares = fund.shares || 0
+    return total + (currentValue * shares)
+  }, 0)
+  
+  // 为每个基金添加占比
+  return sortFunds(funds).map(fund => {
+    const currentValue = fund.currentValue || 0
+    const shares = fund.shares || 0
+    const marketValue = currentValue * shares
+    const ratio = totalValue > 0 ? (marketValue / totalValue) * 100 : 0
+    
+    return {
+      ...fund,
+      ratio: ratio
+    }
+  })
 })
 
 // [WHAT] 京东账户更新状态
@@ -2723,12 +2761,34 @@ function goToDetail(code: string) {
   .search-bar {
     display: none;
   }
-  
+
+  /* 移动端：market-overview紧凑间距 */
+  .market-overview {
+    padding: 12px 2px;
+    margin: 12px 4px;
+  }
+
+  .overview-title {
+    margin-bottom: 2px;
+  }
+
   /* 移动端：持仓趋势每行3个 */
   .index-grid:not(.market-index-grid) {
     grid-template-columns: repeat(3, 1fr);
-    gap: 0px;
+    gap: 2px;
     margin-top: 10px;
+  }
+
+  .index-item {
+    padding: 2px;
+  }
+
+  .index-grid.market-index-grid {
+    gap: 2px;
+  }
+
+  .market-index-item {
+    padding: 2px;
   }
   
   /* 移动端：item内部布局 */

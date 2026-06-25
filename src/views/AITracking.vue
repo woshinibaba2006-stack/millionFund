@@ -539,7 +539,9 @@ function selectRecord(record: AITrackingRecord) {
   // 使用接口返回的今日估值涨幅
   const sellChange = fundPrices.value[record.sellCode]?.change || 0
   const buyChange = fundPrices.value[record.buyCode]?.change || 0
-  router.push(`/ai-tracking/detail/${record.sellCode}/${sellNameEnc}/${record.buyCode}/${buyNameEnc}/${record.sellNav}/${record.buyNav}/${sellPrice}/${buyPrice}/${sellChange}/${buyChange}/${record.date}`)
+  const sellNavEstimated = record.sellNavEstimated ? '1' : '0'
+  const buyNavEstimated = record.buyNavEstimated ? '1' : '0'
+  router.push(`/ai-tracking/detail/${record.sellCode}/${sellNameEnc}/${record.buyCode}/${buyNameEnc}/${record.sellNav}/${record.buyNav}/${sellPrice}/${buyPrice}/${sellChange}/${buyChange}/${record.date}/${sellNavEstimated}/${buyNavEstimated}`)
 }
 
 function formatDate(dateStr: string) {

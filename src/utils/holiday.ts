@@ -1,6 +1,7 @@
 /**
  * 节假日工具函数
  * [WHY] 用于判断某个日期是否是法定节假日，支持缓存以减少API调用
+ * [API] 使用timor.tech节假日API（更稳定，已更新2026年数据）
  */
 
 interface HolidayInfo {
@@ -20,6 +21,166 @@ interface HolidayInfo {
 
 // 节假日缓存（内存缓存，避免频繁请求API）
 const holidayCache = new Map<string, HolidayInfo>()
+
+// localStorage缓存键名
+const CACHE_KEY = 'holiday_cache'
+const CACHE_EXPIRE_KEY = 'holiday_cache_expire'
+const CACHE_EXPIRE_DAYS = 365 // 缓存有效期365天
+
+// API更新频率控制
+const LAST_UPDATE_KEY = 'holiday_last_update'
+const UPDATE_INTERVAL_DAYS = 1 // 每天只更新一次节假日数据
+
+/**
+ * 从localStorage加载缓存
+ */
+function loadCacheFromStorage(): void {
+  try {
+    const cacheData = localStorage.getItem(CACHE_KEY)
+    const expireTime = localStorage.getItem(CACHE_EXPIRE_KEY)
+
+    if (cacheData && expireTime) {
+      const now = Date.now()
+      const expire = parseInt(expireTime, 10)
+
+      // 检查缓存是否过期
+      if (now < expire) {
+        const data = JSON.parse(cacheData)
+        Object.entries(data).forEach(([key, value]) => {
+          holidayCache.set(key, value as HolidayInfo)
+        })
+        console.log('[节假日缓存] 从localStorage加载成功，共', holidayCache.size, '条数据')
+      } else {
+        // 缓存过期，清除
+        localStorage.removeItem(CACHE_KEY)
+        localStorage.removeItem(CACHE_EXPIRE_KEY)
+        localStorage.removeItem(LAST_UPDATE_KEY)
+      }
+    }
+  } catch (error) {
+    console.warn('[节假日缓存] 从localStorage加载失败', error)
+  }
+}
+
+/**
+ * 保存缓存到localStorage
+ */
+function saveCacheToStorage(): void {
+  try {
+    const data: Record<string, HolidayInfo> = {}
+    holidayCache.forEach((value, key) => {
+      data[key] = value
+    })
+
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data))
+
+    // 设置过期时间（365天后）
+    const expireTime = Date.now() + CACHE_EXPIRE_DAYS * 24 * 60 * 60 * 1000
+    localStorage.setItem(CACHE_EXPIRE_KEY, expireTime.toString())
+  } catch (error) {
+    console.warn('[节假日缓存] 保存到localStorage失败', error)
+  }
+}
+
+/**
+ * 检查是否需要更新节假日数据
+ * [WHY] 控制API访问频率，每天只更新一次
+ */
+function shouldUpdateHolidays(): boolean {
+  try {
+    const lastUpdate = localStorage.getItem(LAST_UPDATE_KEY)
+    if (lastUpdate) {
+      const lastUpdateTime = parseInt(lastUpdate, 10)
+      const now = Date.now()
+      const interval = UPDATE_INTERVAL_DAYS * 24 * 60 * 60 * 1000
+
+      // 如果距离上次更新不到1天，不需要更新
+      if (now - lastUpdateTime < interval) {
+        return false
+      }
+    }
+    return true
+  } catch (error) {
+    return true
+  }
+}
+
+/**
+ * 批量更新节假日数据（预加载未来3个月）
+ * [WHY] 减少API调用次数，一次性获取未来3个月的节假日数据
+ */
+async function preloadHolidays(): Promise<void> {
+  if (!shouldUpdateHolidays()) {
+    console.log('[节假日缓存] 今天已更新过，跳过预加载')
+    return
+  }
+
+  try {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = now.getMonth() + 1
+
+    // 获取当前月份和未来2个月的节假日数据
+    const monthsToLoad = [
+      `${year}-${month.toString().padStart(2, '0')}`,
+      `${year}-${((month + 1) % 12 || 12).toString().padStart(2, '0')}`,
+      `${year}-${((month + 2) % 12 || 12).toString().padStart(2, '0')}`
+    ]
+
+    console.log('[节假日缓存] 开始预加载', monthsToLoad.join(', '), '的数据')
+
+    // 使用timor.tech的年度API批量获取数据
+    for (const monthStr of monthsToLoad) {
+      const apiUrl = `https://timor.tech/api/holiday/year/${monthStr}`
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000) // 5秒超时
+
+      try {
+        const response = await fetch(apiUrl, {
+          signal: controller.signal
+        })
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const data = await response.json()
+
+        // 解析并存储每个月的节假日数据
+        if (data && typeof data === 'object') {
+          Object.entries(data).forEach(([dateStr, info]) => {
+            if (typeof dateStr === 'string' && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              holidayCache.set(dateStr, info as HolidayInfo)
+            }
+          })
+        }
+      } catch (error) {
+        console.warn('[节假日缓存] 预加载失败', monthStr, error)
+      }
+    }
+
+    // 保存到localStorage
+    saveCacheToStorage()
+
+    // 记录更新时间
+    localStorage.setItem(LAST_UPDATE_KEY, Date.now().toString())
+
+    console.log('[节假日缓存] 预加载完成，共', holidayCache.size, '条数据')
+  } catch (error) {
+    console.warn('[节假日缓存] 预加载失败', error)
+  }
+}
+
+// 页面加载时从localStorage加载缓存
+loadCacheFromStorage()
+
+// 页面加载时异步预加载节假日数据（不阻塞主线程）
+setTimeout(() => {
+  preloadHolidays().catch(err => {
+    console.warn('[节假日缓存] 预加载失败', err)
+  })
+}, 1000) // 延迟1秒执行，避免阻塞页面加载
 
 /**
  * 同步判断某个日期是否是节假日（使用缓存）
@@ -48,16 +209,18 @@ export function isHolidaySync(date: string): boolean {
 
   const isHolidayResult = holidays2026.includes(date)
 
-  // 异步更新缓存（不阻塞主线程）
-  isHoliday(date).catch(err => {
-    console.warn('[节假日缓存更新失败]', date, err)
-  })
+  // 如果缓存中没有数据，触发预加载
+  if (holidayCache.size === 0) {
+    preloadHolidays().catch(err => {
+      console.warn('[节假日缓存] 预加载失败', err)
+    })
+  }
 
   return isHolidayResult
 }
 
 /**
- * 查询某个日期是否是节假日
+ * 查询某个日期是否是节假日（异步版本，使用timor.tech API）
  * @param date 日期字符串，格式 '2026-06-19'
  * @returns Promise<boolean> true表示是节假日，false表示不是
  */
@@ -70,18 +233,31 @@ export async function isHoliday(date: string): Promise<boolean> {
   }
 
   try {
-    // 调用节假日API
-    const response = await fetch(`https://holiday.ailcc.com/api/holiday/info/${date}`)
+    // 调用timor.tech节假日API（添加超时机制）
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000) // 3秒超时
+
+    const response = await fetch(`https://timor.tech/api/holiday/info/${date}`, {
+      signal: controller.signal
+    })
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
     const data: HolidayInfo = await response.json()
 
     // 存入缓存
     holidayCache.set(date, data)
 
+    // 保存到localStorage
+    saveCacheToStorage()
+
     // type: 2节日、3调休放假 表示节假日
     return data.type.type === 2 || data.type.type === 3
   } catch (error) {
-    console.error('[节假日查询失败]', date, error)
-    // API调用失败时，返回false（保守处理）
+    // API调用失败时，不打印错误日志，避免刷屏
     return false
   }
 }
@@ -179,4 +355,7 @@ export async function getPrevWorkday(date: string): Promise<string> {
  */
 export function clearHolidayCache(): void {
   holidayCache.clear()
+  localStorage.removeItem(CACHE_KEY)
+  localStorage.removeItem(CACHE_EXPIRE_KEY)
+  localStorage.removeItem(LAST_UPDATE_KEY)
 }

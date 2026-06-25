@@ -43,7 +43,7 @@ const router = createRouter({
       meta: { title: 'AI追踪', keepAlive: true }
     },
     {
-      path: '/ai-tracking/detail/:sellCode/:sellName/:buyCode/:buyName/:sellNav/:buyNav/:sellPrice/:buyPrice/:sellChange/:buyChange/:date',
+      path: '/ai-tracking/detail/:sellCode/:sellName/:buyCode/:buyName/:sellNav/:buyNav/:sellPrice/:buyPrice/:sellChange/:buyChange/:date/:sellNavEstimated/:buyNavEstimated',
       name: 'ai-tracking-detail',
       component: () => import('@/views/AITrackingDetail.vue'),
       meta: { title: '调仓详情' }

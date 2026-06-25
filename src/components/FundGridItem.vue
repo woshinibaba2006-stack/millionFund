@@ -25,6 +25,22 @@ function getFundNameClass(fund: any, tradingSession?: string) {
   }
   return 'fund-name-updated'  // 已更新显示黄色
 }
+
+// 获取占比背景色样式
+function getRatioStyle(ratio: number) {
+  // 占占比越大，背景色越深
+  // 统一使用蓝色背景，白色文字
+  const intensity = Math.min(ratio / 30, 1) // 最大30%，超过30%也用最深色
+  
+  // 使用蓝色渐变：rgba(33, 150, 243, intensity)
+  // intensity从0到1，背景色从浅蓝到深蓝
+  const alpha = 0.2 + intensity * 0.6 // alpha从0.2到0.8
+  
+  return {
+    backgroundColor: `rgba(33, 150, 243, ${alpha})`,
+    color: '#fff' // 统一使用白色文字
+  }
+}
 </script>
 
 <template>
@@ -45,6 +61,9 @@ function getFundNameClass(fund: any, tradingSession?: string) {
           <span v-if="fund.isQDII" class="qdii-tag">QD</span>
         </div>
         <div class="fund-name-right" :class="getFundNameClass(fund, tradingSession)">{{ fund.name }}</div>
+        <div class="fund-ratio-badge" v-if="fund.ratio && fund.ratio > 0" :style="getRatioStyle(fund.ratio)">
+          {{ fund.ratio.toFixed(1) }}%
+        </div>
       </div>
     </div>
     <div class="index-content web-only">
@@ -108,6 +127,9 @@ function getFundNameClass(fund: any, tradingSession?: string) {
             <span v-if="fund.isQDII" class="qdii-tag">QD</span>
           </div>
           <div class="fund-name-right" :class="getFundNameClass(fund, tradingSession)">{{ fund.name }}</div>
+          <div class="fund-ratio-badge" v-if="fund.ratio && fund.ratio > 0" :style="getRatioStyle(fund.ratio)">
+            {{ fund.ratio.toFixed(1) }}%
+          </div>
         </div>
       </div>
       <div class="mobile-item-row mobile-item-row-2">
@@ -245,6 +267,26 @@ function getFundNameClass(fund: any, tradingSession?: string) {
   display: flex;
   align-items: center;
   height: 100%;
+  max-width: 180px; /* 限制基金名称宽度，为占比badge留出空间 */
+}
+
+/* 占比badge样式 */
+.fund-ratio-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+  min-width: 32px;
+  height: 16px;
+  line-height: 16px;
+  font-family: var(--font-number);
+  transition: all 0.3s ease;
+  white-space: nowrap;
 }
 
 /* 基金名称更新状态颜色 */
@@ -457,11 +499,19 @@ function getFundNameClass(fund: any, tradingSession?: string) {
   width: 100%;
 }
 
-.mobile-item-row-1 { min-height: 14px; padding: 0px 0; }
-.mobile-item-row-1 .fund-name-content { gap: 3px; }
-.mobile-item-row-1 .source-icon-small { width: 10px; height: 10px; }
-.mobile-item-row-1 .qdii-tag { font-size: 7px; padding: 1px 2px; }
-.mobile-item-row-1 .fund-name-right { font-size: 10px; line-height: 1.2; }
+.mobile-item-row-1 { min-height: 16px; padding: 0px 0; }
+.mobile-item-row-1 .fund-name-content { gap: 1px; }
+.mobile-item-row-1 .source-icon-small { width: 12px; height: 12px; }
+.mobile-item-row-1 .qdii-tag { font-size: 8px; padding: 1px 3px; }
+.mobile-item-row-1 .fund-name-right { font-size: 11px; line-height: 1.2; max-width: 120px; }
+.mobile-item-row-1 .fund-ratio-badge {
+  font-size: 9px;
+  padding: 2px 3px;
+  height: 16px;
+  line-height: 16px;
+  margin-left: 1px;
+  white-space: nowrap;
+}
 
 .mobile-item-row-2 {
   display: flex;
@@ -473,7 +523,7 @@ function getFundNameClass(fund: any, tradingSession?: string) {
   padding: 0;
 }
 .mobile-item-row-2 .fund-code { 
-  font-size: 9px; 
+  font-size: 10px; 
   font-weight: 600; 
   flex-shrink: 0; 
   line-height: 1; 
@@ -482,7 +532,7 @@ function getFundNameClass(fund: any, tradingSession?: string) {
   margin-bottom: 0;
 }
 .mobile-item-row-2 .fund-sectors {
-  font-size: 8px;
+  font-size: 9px;
   color: var(--text-secondary);
   flex: 1;
   white-space: nowrap;
@@ -520,7 +570,7 @@ function getFundNameClass(fund: any, tradingSession?: string) {
   justify-content: center;
   padding: 0 4px;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
 }
 

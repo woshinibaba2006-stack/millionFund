@@ -299,7 +299,7 @@ async function enhanceHoldings(holdings: RecognizedHolding[]) {
       // 获取当前净值：为避免当前调试期间网络 JSONP 超时导致过多错误，
       // 可通过 DEBUG_SKIP_REMOTE_ESTIMATE 临时跳过远程请求。
       if (enhancedHoldings.value[index].code) {
-        if (!DEBUG_SKIP_REMOTE_ESTIMATE && !useLocalOcr.value) {
+        if (!DEBUG_SKIP_REMOTE_ESTIMATE && !useOnlineOcr.value) {
           try {
             const estimate = await fetchFundEstimate(enhancedHoldings.value[index].code)
             if (estimate) {
@@ -393,6 +393,22 @@ function toggleSelectAll() {
   )
   const allSelected = validHoldings.every(h => h.selected)
   validHoldings.forEach(h => { h.selected = !allSelected })
+}
+
+// [WHAT] Wrapper functions for event handling (TypeScript type safety)
+function handleCodeChange(index: number, event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  updateCode(index, value)
+}
+
+function handleAmountInput(index: number, event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  updateAmount(index, value)
+}
+
+function handleProfitInput(index: number, event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  updateProfit(index, value)
 }
 
 // [WHAT] 修改金额
@@ -703,7 +719,7 @@ function formatAmount(amount: number): string {
                   class="code-input"
                   placeholder="输入代码"
                   @click.stop
-                  @change="updateCode(index, $event.target.value)"
+                  @change="handleCodeChange(index, $event)"
                 />
                 <van-loading v-if="holding.loading" size="12" />
               </div>
@@ -719,7 +735,7 @@ function formatAmount(amount: number): string {
                   :value="holding.amount"
                   class="amount-input"
                   @click.stop
-                  @input="updateAmount(index, $event.target.value)"
+                  @input="handleAmountInput(index, $event)"
                 />
               </div>
               <div class="amount-row">
@@ -727,9 +743,9 @@ function formatAmount(amount: number): string {
                 <input 
                   type="number" 
                   :value="holding.profit"
-                  class="amount-input profit-input"
+                  class="amount-input"
                   @click.stop
-                  @input="updateProfit(index, $event.target.value)"
+                  @input="handleProfitInput(index, $event)"
                 />
               </div>
             </div>
