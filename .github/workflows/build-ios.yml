@@ -15,7 +15,7 @@ jobs:
       - name: 配置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: 配置npm国内镜像
         run: npm config set registry https://registry.npmmirror.com
