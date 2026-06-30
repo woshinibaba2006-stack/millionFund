@@ -30,13 +30,10 @@ jobs:
         run: npm install @capacitor/ios@7 --legacy-peer-deps
 
       - name: 添加 iOS 平台
-        run: npx cap add ios --skip-pod-install
+        run: npx cap add ios
 
       - name: 同步资源到原生工程
-        run: npx cap sync ios --skip-pod-install
-
-      - name: 安装 iOS 原生依赖
-        run: cd ios/App && pod install --repo-update
+        run: npx cap sync ios
 
       - name: 构建并导出无签名 IPA
         run: |
