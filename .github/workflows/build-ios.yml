@@ -26,6 +26,9 @@ jobs:
       - name: 构建前端代码
         run: npx vite build
 
+      - name: 安装 iOS 平台依赖
+        run: npm install @capacitor/ios --legacy-peer-deps
+
       - name: 添加 iOS 平台
         run: npx cap add ios
 
