@@ -1,0 +1,56 @@
+name: Build iOS IPA (Capacitor)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装项目依赖
+        run: npm install
+
+      - name: 构建前端代码
+        run: npm run build
+
+      - name: 添加 iOS 平台并同步资源
+        run: |
+          npx cap add ios
+          npx cap sync
+
+      - name: 安装 iOS 原生依赖
+        run: cd ios && pod install --repo-update
+
+      - name: 构建并导出无签名 IPA
+        run: |
+          cd ios
+          xcodebuild archive \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -archivePath ../build/App.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+          xcodebuild -exportArchive \
+            -archivePath ../build/App.xcarchive \
+            -exportPath ../build/ipa-output \
+            -exportOptionsPlist ../exportOptions.plist
+
+      - name: 上传 IPA 安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: build/ipa-output/*.ipa
