@@ -1,0 +1,8 @@
+{
+  "appId": "com.million.fund",
+  "appName": "millionFund",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
