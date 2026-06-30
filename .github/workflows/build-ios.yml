@@ -35,7 +35,7 @@ jobs:
       - name: 同步资源到原生工程
         run: npx cap sync ios
 
-      - name: 构建并导出无签名 IPA
+      - name: 编译生成归档文件
         run: |
           xcodebuild archive \
             -workspace ios/App/App.xcworkspace \
@@ -47,13 +47,15 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM=""
 
-          xcodebuild -exportArchive \
-            -archivePath build/App.xcarchive \
-            -exportPath build/ipa-output \
-            -exportOptionsPlist exportOptions.plist
+      - name: 手动打包生成无签名 IPA
+        run: |
+          mkdir -p build/ipa-output/Payload
+          cp -R build/App.xcarchive/Products/Applications/App.app build/ipa-output/Payload/
+          cd build/ipa-output
+          zip -qry App.ipa Payload
 
       - name: 上传 IPA 安装包
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: build/ipa-output/*.ipa
+          path: build/ipa-output/App.ipa
