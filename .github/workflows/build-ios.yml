@@ -1,5 +1,5 @@
 name: Build iOS IPA (Capacitor)
-#仅测试
+
 on:
   push:
     branches: [ main ]
@@ -23,11 +23,11 @@ jobs:
       - name: 安装项目依赖
         run: npm install --legacy-peer-deps
 
+      - name: 统一 Capacitor 全家桶到 7.x 版本
+        run: npm install @capacitor/ios@7 @capacitor/filesystem@7 --legacy-peer-deps
+
       - name: 构建前端代码
         run: npx vite build
-
-      - name: 安装指定版本 iOS 平台依赖
-        run: npm install @capacitor/ios@7 --legacy-peer-deps
 
       - name: 添加 iOS 平台
         run: npx cap add ios
