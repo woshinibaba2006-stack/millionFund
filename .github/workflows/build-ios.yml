@@ -24,7 +24,7 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: 构建前端代码
-        run: npm run build
+        run: npx vite build
 
       - name: 添加 iOS 平台
         run: npx cap add ios
